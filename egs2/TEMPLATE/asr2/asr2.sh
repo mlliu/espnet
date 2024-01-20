@@ -36,10 +36,14 @@ eval_valid_set=false # Run decoding for the validation set
 ngpu=1               # The number of gpus ("0" uses cpu, otherwise use gpu).
 num_nodes=1          # The number of nodes.
 nj=32                # The number of parallel jobs.
-inference_nj=32      # The number of parallel jobs in decoding.
+inference_nj=12      # The number of parallel jobs in decoding.
 gpu_inference=false  # Whether to perform gpu decoding.
-dumpdir=dump         # Directory to dump features.
-expdir=exp           # Directory to save experiments.
+dumpdir=/export/fs05/mliu121/espnet_data/librispeech_100_asr2/dump         # Directory to dump features.
+expdir=/export/fs05/mliu121/espnet_data/librispeech_100_asr2/exp           # Directory to save experiments.
+datadir=/export/fs05/mliu121/espnet_data/librispeech_100_asr2/data
+# build a symbolic link between datadir with data
+#ln -s $datadir data
+
 python=python3       # Specify python to execute espnet commands.
 
 # Data preparation related
@@ -60,9 +64,10 @@ kmeans_opts=                # The options given to scripts/feats/perform_kmeans.
 kmeans_feature="wavlm_large/21" # format: ssl_model_type/layer_idx (e.g. mfcc, hubert_large/21, wavlm_large/21)
 portion=0.1
 nclusters=2000              # The number of clusters for discrete tokenss
-storage_save_mode=true      # Save storage on SSL feature extraction
+storage_save_mode=false      # Save storage on SSL feature extraction
                             # If true, feature extraction and kmeans clustering on the fly
 gpu_kmeans=true             # Whether to use gpu for kmeans.
+kmeans_cluster=false
 
 # Tokenization related
 oov="<unk>"         # Out of vocabulary symbol.
@@ -563,7 +568,7 @@ if "${skip_data_prep}"; then
     skip_stages+=" 1 2 3 4 5 6"
 fi
 if "${skip_train}"; then
-    skip_stages+=" 5 6 7 8 9 10 11 12 13"
+    skip_stages+=" 6 7 8 9 10 11 12 13"
 elif ! "${use_lm}"; then
     skip_stages+=" 8 9 10"
 fi
@@ -587,7 +592,7 @@ log "Skipped stages: ${skip_stages}"
 # ========================== Main stages start from here. ==========================
 
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && ! [[ " ${skip_stages} " =~ [[:space:]]1[[:space:]] ]]; then
-    log "Stage 1: Data preparation for data/${train_set}, data/${valid_set}, etc."
+    log "Stage 1: Data local_data_opts for data/${train_set}, data/${valid_set}, etc."
     # [Task dependent] Need to create data.sh for new corpus
     local/data.sh ${local_data_opts}
 fi
@@ -680,12 +685,61 @@ fi
 
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [[:space:]]4[[:space:]] ]]; then
-    log "Stage 4a: Perform Kmeans using ${kmeans_feature_type} features"
+    log "Stage 4a: Extract using ${kmeans_feature_type} features"
+    _suf="${layer}/"  #"tri4b/"
+    #if [[ "${kmeans_feature_type}" == *hmm* ]]; then
+    if ! $kmeans_cluster; then
+      echo "we use hmm-gmm model as the tokenizer, just copy the generated tokens from Kaldi"
+      #decode_type=decode #$(echo "${kmeans_feature_type}" | rev | cut -d_ -f1 | rev)
+      #echo "decode type is $decode_type"  # is should be decode or align
+      if "${skip_train}"; then
+	      _dsets="${test_sets}"
+      else
+	      _dsets="${train_set} ${train_sp_sets} ${test_sets}"
+      fi
+      for dset in ${_dsets}; do
+          _dump_dir="${data_extract}/${kmeans_feature_type}/${_suf}${dset}"
+          utils/copy_data_dir.sh --validate_opts --non-print "${data_audio}/${dset}" "${_dump_dir}"
 
-    scripts/feats/perform_kmeans.sh \
-        --stage 1 --stop-stage 4 \
-        --train_set "${train_set}" \
-        --dev_set "${valid_set}" \
+          echo "Dump hmm ${dset} features to ${_dump_dir}"
+          #/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/pca80_wavlm/tri4b_2500/decode_phonelm_dev_clean/tri4b_2500_dev_clean_decode_pdf_alignment
+          hmmKaldidir="/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/lda80_wavlm_1000beam_nodelta_trans_monostate/tri4b_4200" #"/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/tri3b_ali"
+          #hmmKaldidir="/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/wavlm/diag_ubm/gmm_index_${dset}"
+          #cp "${hmmKaldidir}_${dset}/tri3b_${dset}_pdf_alignment" "${_dump_dir}/pseudo_labels_km${nclusters}.txt"
+                # process the pdf alignment line by line and remove "lbi-" prefix, and then save to the pseudo_labels_km${nclusters}.txt
+          #if [ "$decode_type" = decode ]; then
+        _pdf_alignment="${hmmKaldidir}/decode_uniphonelm_${dset}/tri4b_4200_${dset}_decode_pdf_alignment" #"${hmmKaldidir}_${dset}/tri3b_${dset}_pdf_alignment"
+         # else
+      #	_pdf_alignment="${hmmKaldidir}/align_${dset}/${layer}_${dset}_align_pdf_alignment"
+       #   fi
+         #_pdf_alignment="${hmmKaldidir}/gmm_index"
+         _pseudo_labels="${_dump_dir}/pseudo_labels_km${nclusters}.txt"
+         # if the files exits, remove it
+         if [ -f "${_pseudo_labels}" ]; then
+           rm "${_pseudo_labels}"
+               fi
+         while IFS= read -r line; do
+           echo "${line}" | sed -e 's/lbi-//g' >> "${_pseudo_labels}"
+         done < "${_pdf_alignment}"
+
+      done
+      # merge the dev dataset
+      if ! $skip_train; then
+           _dump_dir="${data_extract}/${kmeans_feature_type}/${_suf}"
+           utils/combine_data.sh --extra_files "pseudo_labels_km${nclusters}.txt" "${_dump_dir}${valid_set}"  "${_dump_dir}dev_clean"  "${_dump_dir}dev_other"
+      fi 
+   else
+       echo "we use k-means as tokenizer"
+       _suf=
+       if [ -n "${layer}" ]; then
+           _suf="layer${layer}/"
+       fi
+      if $skip_train; then
+        echo "the k-means model has been trained, so just use the trained model to dump ids"
+        skip_train_kmeans=true
+
+        scripts/feats/perform_kmeans.sh \
+        --stage 3 --stop-stage 2 \
         --other_sets "${test_sets} ${train_sp_sets}" \
         --datadir "${data_audio}" \
         --featdir "${data_extract}" \
@@ -701,11 +755,41 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [
         --nj ${nj} \
         --cpu_cmd "${train_cmd}" \
         --cuda_cmd "${cuda_cmd}" \
+        --skip_train_kmeans ${skip_train_kmeans} \
         ${kmeans_opts}
+      else
+        echo "train the k-means model based on the training dataset, and then dump ids for all dataset"
+        skip_train_kmeans=false
 
+        scripts/feats/perform_kmeans.sh \
+            --stage 1 --stop-stage 3 \
+            --train_set "${train_set}" \
+            --dev_set "${valid_set}" \
+            --other_sets "${test_sets} ${train_sp_sets}" \
+            --datadir "${data_audio}" \
+            --featdir "${data_extract}" \
+            --audio_format "${audio_format}" \
+            --feature_type "${kmeans_feature_type}" \
+            --layer "${layer}" \
+            --feature_conf "${kmeans_feature_conf}" \
+            --km_dir "${km_dir}" \
+            --portion "${portion}" \
+            --nclusters "${nclusters}" \
+            --storage_save_mode ${storage_save_mode} \
+            --use_gpu ${gpu_kmeans} \
+            --nj ${nj} \
+            --cpu_cmd "${train_cmd}" \
+            --cuda_cmd "${cuda_cmd}" \
+            ${kmeans_opts}
+      fi
+    fi
     log "Stage 4b: Prepare token_list and convert number indices to CJK tokens"
 
     # Get uniq chars
+    if [ ! -d "${km_dir}" ]; then
+	    mkdir -p "${km_dir}"
+    fi
+
     if [ ! -f "${km_dir}/../"distinct_cjk_token_lists ]; then
         if [ ${nclusters} -ge 20900 ]; then
             echo "Warning: too many clusters, be careful with the distinct token list."
@@ -714,14 +798,13 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [
             > "${km_dir}/../"distinct_cjk_token_lists
     fi
 
-    _suf=
-    if [ -n "${layer}" ]; then
-        _suf="layer${layer}/"
-    fi
-
     if [ "${src_case}" = ts ]; then
         echo "keep the original discrete token sequence"
         for dset in "${train_set}" ${train_sp_sets} "${valid_set}" ${test_sets}; do
+	    if [ -z "${dset}" ]; then
+		    continue
+            fi
+	    echo "${dset}"
             awk '
                 (FILENAME==ARGV[1]) {a[$1]=$2}
                 (FILENAME==ARGV[2]) {
@@ -754,6 +837,11 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [
     fi
 
     for dset in "${train_set}" ${train_sp_sets} "${valid_set}" ${test_sets}; do
+	if [ -z "${dset}" ]; then
+	 continue
+        fi
+	echo "${dset}"
+
         cp data/${dset}/text data/${dset}/text.${tgt_case}.${tgt_lang}
     done
 
@@ -822,6 +910,7 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ] && ! [[ " ${skip_stages} " =~ [
 
         for utt_extra_file in ${utt_extra_files}; do
             cp "${data_feats}/org/${dset}/${utt_extra_file}" "${data_feats}/${dset}"
+            echo "cp ${data_feats}/org/${dset}/${utt_extra_file} ${data_feats}/${dset}"
         done
 
         # Remove empty text
@@ -835,6 +924,17 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ] && ! [[ " ${skip_stages} " =~ [
         filtered_num_samples=$(wc -l "${data_feats}/${dset}/utt2spk" | cut -d' ' -f1)
         echo "filter samples with empty texts: removed $((org_num_samples - filtered_num_samples)) samples with empty text"
 
+	# sort the src file in the train
+	if [ "${dset}" = "${train_set}" ]; then
+		src_file=${data_feats}/${dset}/text.${src_case}.${src_lang}
+		echo "sort the src file ${src_file}"
+		cp ${src_file} ${src_file}.tmp
+		awk 'NR==FNR {order[$2]=$1; next} {print order[$1], $0}' ${data_feats}/${dset}/text.ts.en.temp ${src_file} | sort -n | cut -d' ' -f2- > ${src_file}_sorted
+	
+		rm ${src_file}
+		mv ${src_file}_sorted ${src_file}
+	fi 
+
         # TODO: Add other data cleaning -- currently being done as part of data.sh
     done
 
@@ -844,7 +944,6 @@ fi
 
 
 if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ] && ! [[ " ${skip_stages} " =~ [[:space:]]7[[:space:]] ]]; then
-
     if "${token_joint}"; then
         log "Merge src and target data if joint BPE"
 
@@ -853,7 +952,7 @@ if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ] && ! [[ " ${skip_stages} " =~ [
         # Set the new text as the target text
         tgt_bpe_train_text="${data_feats}/${train_set}/text.${src_lang}_${tgt_lang}"
     fi
-
+    if false; then
     # First generate tgt lang
     if [ "${tgt_token_type}" = bpe ]; then
         log "Stage 7a: Generate token_list from ${tgt_bpe_train_text} using BPE for tgt_lang"
@@ -926,7 +1025,10 @@ if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ] && ! [[ " ${skip_stages} " =~ [
             --add_symbol "${oov}:1" \
             --add_symbol "${sos_eos}:-1"
     fi
+   
+    fi
 
+   echo "generate token for src language"
     # Then generate src lang
     if "${token_joint}"; then
         log "Stage 7b: Skip separate token construction for src_lang when setting ${token_joint} as true"
@@ -952,7 +1054,6 @@ if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ] && ! [[ " ${skip_stages} " =~ [
                 --character_coverage=${src_bpe_char_cover} \
                 --input_sentence_size="${src_bpe_input_sentence_size}" \
                 ${_opts_spm}
-
             {
             echo "${blank}"
             echo "${oov}"
@@ -988,7 +1089,6 @@ if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ] && ! [[ " ${skip_stages} " =~ [
         fi
     fi
 fi
-
 
 # ========================== Data preparation is done here. ==========================
 
@@ -1193,13 +1293,13 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
 
     # Get the minimum number among ${nj} and the number lines of input files
     _nj=$(min "${nj}" "$(<${_asr_train_dir}/${_scp} wc -l)" "$(<${_asr_valid_dir}/${_scp} wc -l)")
-
     key_file="${_asr_train_dir}/${_scp}"
     split_scps=""
     for n in $(seq "${_nj}"); do
         split_scps+=" ${_logdir}/train.${n}.scp"
     done
     # shellcheck disable=SC2086
+    echo "${key_file}, and, ${split_scps} and nj=${_nj}"
     utils/split_scp.pl "${key_file}" ${split_scps}
 
     key_file="${_asr_valid_dir}/${_scp}"
@@ -1208,6 +1308,7 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
         split_scps+=" ${_logdir}/valid.${n}.scp"
     done
     # shellcheck disable=SC2086
+    echo "run split scp second time"
     utils/split_scp.pl "${key_file}" ${split_scps}
 
     # 2. Generate run.sh
@@ -1236,10 +1337,10 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
             --g2p "${g2p}" \
             --train_data_path_and_name_and_type "${_asr_train_dir}/text.${tgt_case}.${tgt_lang},text,text" \
             --train_data_path_and_name_and_type "${_asr_train_dir}/text.${src_case}.${src_lang},src_text,text" \
-            --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.${tgt_case}.${tgt_lang},text,text" \
-            --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.${src_case}.${src_lang},src_text,text" \
+	    --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.${tgt_case}.${tgt_lang},text,text" \
+	    --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.${src_case}.${src_lang},src_text,text" \
             --train_shape_file "${_logdir}/train.JOB.scp" \
-            --valid_shape_file "${_logdir}/valid.JOB.scp" \
+	    --valid_shape_file "${_logdir}/valid.JOB.scp" \
             --output_dir "${_logdir}/stats.JOB" \
             ${_opts} ${asr_args} || { cat $(grep -l -i error "${_logdir}"/stats.*.log) ; exit 1; }
 
@@ -1438,6 +1539,7 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
         mkdir -p "${_logdir}"
 
         _scp=text.${src_case}.${src_lang}
+	echo "decodeing the file ${_scp}"
 
         # 1. Split the key file
         key_file=${_data}/${_scp}
@@ -1454,7 +1556,8 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
         # 2. Submit decoding jobs
         log "Decoding started... log: '${_logdir}/asr_inference.*.log'"
         # shellcheck disable=SC2046,SC2086
-        ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
+        #${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
+	${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
             ${python} -m ${asr_inference_tool} \
                 --batch_size ${batch_size} \
                 --ngpu "${_ngpu}" \
@@ -1473,7 +1576,6 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
         done
     done
 fi
-
 if [ ${stage} -le 15 ] && [ ${stop_stage} -ge 15 ] && ! [[ " ${skip_stages} " =~ [[:space:]]15[[:space:]] ]]; then
     log "Stage 15: Scoring"
 
@@ -1486,7 +1588,7 @@ if [ ${stage} -le 15 ] && [ ${stop_stage} -ge 15 ] && ! [[ " ${skip_stages} " =~
         _data="${data_feats}/${dset}"
         _dir="${asr_exp}/${inference_tag}/${dset}"
 
-        for _tok_type in "char" "word" "bpe"; do
+        for _tok_type in "word" "bpe"; do  #"char" "word" "bpe"; do
             [ "${_tok_type}" = bpe ] && [ ! -f "${tgt_bpemodel}" ] && continue
 
             _opts="--token_type ${_tok_type} "

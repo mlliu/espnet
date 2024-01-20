@@ -33,20 +33,20 @@ if [ -z "${SWBD}" ]; then
     exit 1
 fi
 
-
+SWBD2=/export/corpora5/LDC
 # we assume the following data structure
   # SWBD: LDC97S62 LDC2002S09 LDC2002T43 LDC2004T19 LDC2005T19 LDC2004S13 LDC2005S13
 swbd1_dir=${SWBD}/LDC97S62
-eval2000_dir="${SWBD}/LDC2002S09/hub5e_00 ${SWBD}/LDC2002T43"
+eval2000_dir="${SWBD2}/LDC2002S09/hub5e_00 ${SWBD2}/LDC2002T43"
 fisher_dir="${SWBD}/LDC2004T19 ${SWBD}/LDC2005T19 ${SWBD}/LDC2004S13 ${SWBD}/LDC2005S13"
 
 
 
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     log " Data Preparation"
-    local/swbd1_data_download.sh ${swbd1_dir}
-    local/swbd1_prepare_dict.sh
-    local/swbd1_data_prep.sh ${swbd1_dir}
+    #local/swbd1_data_download.sh ${swbd1_dir}
+    #local/swbd1_prepare_dict.sh
+    #local/swbd1_data_prep.sh ${swbd1_dir}
     local/eval2000_data_prep.sh ${eval2000_dir}
     if [ -n "${fisher_dir}" ]; then
          local/fisher_data_prep.sh ${fisher_dir}

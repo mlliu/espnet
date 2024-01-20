@@ -9,7 +9,7 @@ train_set="train_clean_100"
 valid_set="dev"
 test_sets="test_clean test_other dev_clean dev_other"
 
-asr_config=conf/train_asr.yaml
+asr_config=conf/tuning/train_asr_SSL_e_branchformer_size256_mlp1024_linear1024_e12_mactrue_edrop0.0_ddrop0.0.yaml
 inference_config=conf/decode_asr.yaml
 
 ./asr.sh \
@@ -20,7 +20,6 @@ inference_config=conf/decode_asr.yaml
     --inference_nj 2 \
     --nbpe 5000 \
     --max_wav_duration 30 \
-    --speed_perturb_factors "0.9 1.0 1.1" \
     --audio_format "flac.ark" \
     --feats_type raw \
     --use_lm false \
@@ -30,4 +29,7 @@ inference_config=conf/decode_asr.yaml
     --valid_set "${valid_set}" \
     --test_sets "${test_sets}" \
     --lm_train_text "data/${train_set}/text" \
-    --bpe_train_text "data/${train_set}/text" "$@"
+    --bpe_train_text "data/${train_set}/text" "$@" \
+    --feats_normalize uttmvn \
+    --asr_stats_dir "/export/fs05/mliu121/espnet_data/librispeech_100_asr1/exp/asr_stats_raw_en_bpe5000_SSL"
+    #--speed_perturb_factors "0.9 1.0 1.1" \

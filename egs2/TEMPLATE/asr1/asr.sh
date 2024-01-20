@@ -24,7 +24,7 @@ min() {
 SECONDS=0
 
 # General configuration
-stage=1              # Processes starts from the specified stage.
+stage=7           # Processes starts from the specified stage.
 stop_stage=10000     # Processes is stopped at the specified stage.
 skip_stages=         # Spicify the stage to be skipped
 skip_data_prep=false # Skip data preparation stages.
@@ -38,8 +38,12 @@ num_nodes=1          # The number of nodes.
 nj=32                # The number of parallel jobs.
 inference_nj=32      # The number of parallel jobs in decoding.
 gpu_inference=false  # Whether to perform gpu decoding.
-dumpdir=dump         # Directory to dump features.
-expdir=exp           # Directory to save experiments.
+dumpdir=/export/fs05/mliu121/espnet_data/librispeech_100_asr1/dump         # Directory to dump features.
+expdir=/export/fs05/mliu121/espnet_data/librispeech_100_asr1/exp
+#datadir=/export/fs05/mliu121/espnet_data/librispeech_asr1_data
+datadir=/export/fs05/mliu121/espnet_data/librispeech_100_asr1/data
+#ln -s $datadir data
+# Directory to save experiments.
 python=python3       # Specify python to execute espnet commands.
 
 # Data preparation related
@@ -334,6 +338,8 @@ elif [ "${feats_type}" = fbank ]; then
     data_feats=${dumpdir}/fbank
 elif [ "${feats_type}" == extracted ]; then
     data_feats=${dumpdir}/extracted
+elif [ "${feats_type}" == ssl ]; then
+	data_feats=${dumpdir}/ssl
 else
     log "${help_message}"
     log "Error: not supported: --feats_type ${feats_type}"
@@ -782,7 +788,31 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ] && ! [[ " ${skip_stages} " =~ [
 
             echo "${feats_type}" > "${data_feats}${_suf}/${dset}/feats_type"
         done
+    elif [ "${feats_type}" = ssl ]; then
+	log "Stage 3: ${feats_type} extract: data/ -> ${data_feats}, currently only have wvaLM_layer21 feature"
+	for dset in ${_dsets}; do
+	  if [ "${dset}" = "${train_set}" ] || [ "${dset}" = "${valid_set}" ]; then
+		_suf="/org"
+	  else
+		_suf=""
+	  fi
+	  _nj=$(min "${nj}" "$(<"${data_feats}${_suf}/${dset}/utt2spk" wc -l)")
 
+	  # Copy the extracted wavLM feature to the feats dir
+	  wavLMdir="/export/fs05/mliu121/espnet_data/librispeech_100_asr2/dump/extracted/wavlm_large/layer21"
+	  utils/fix_data_dir.sh $wavLMdir/"${dset}"
+	  utils/copy_data_dir.sh --validate_opts --non-print $wavLMdir/"${dset}" "${data_feats}${_suf}/${dset}"
+           # 3. Derive the the frame length and feature dimension
+	  scripts/feats/feat_to_shape.sh --nj "${_nj}" --cmd "${train_cmd}" \
+		  "${data_feats}${_suf}/${dset}/feats.scp" "${data_feats}${_suf}/${dset}/feats_shape"
+
+	  # 4. Write feats_dim
+	  head -n 1 "${data_feats}${_suf}/${dset}/feats_shape" | awk '{ print $2 }' \
+		  | cut -d, -f2 > ${data_feats}${_suf}/${dset}/feats_dim
+
+	  # 5. Write feats_type
+ 	  echo "${feats_type}" > "${data_feats}${_suf}/${dset}/feats_type"
+	done
     else
         log "Error: not supported: --feats_type ${feats_type}"
         exit 2
@@ -825,7 +855,7 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [
             if [ -z "${_frame_shift}" ]; then
                 # If not existing, use the default number in Kaldi (=10ms).
                 # If you are using different number, you have to change the following value manually.
-                _frame_shift=10
+                _frame_shift=20 # the frame shift for wavLM is 20ms
             fi
 
             _min_length=$(python3 -c "print(int(${min_wav_duration} / ${_frame_shift} * 1000))")
@@ -1178,7 +1208,7 @@ fi
 
 
 if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ] && ! [[ " ${skip_stages} " =~ [[:space:]]10[[:space:]] ]]; then
-    _asr_train_dir="${data_feats}/${train_set}"
+    _asr_train_dir="${data_feats}/${train_set}" # all the training data with different sp
     _asr_valid_dir="${data_feats}/${valid_set}"
     log "Stage 10: ASR collect stats: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}"
 

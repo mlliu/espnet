@@ -12,10 +12,11 @@ test_sets="test_clean test_other dev_clean dev_other"
 asr_config=conf/train_asr_conformer.yaml
 lm_config=conf/tuning/train_lm_transformer2.yaml
 inference_config=conf/decode_asr.yaml
+dumpdir=/export/fs05/mliu121/espnet_feature_dump
 
 ./asr.sh \
     --lang en \
-    --ngpu 4 \
+    --ngpu 1 \
     --nbpe 5000 \
     --max_wav_duration 30 \
     --speed_perturb_factors "0.9 1.0 1.1" \
@@ -27,3 +28,4 @@ inference_config=conf/decode_asr.yaml
     --test_sets "${test_sets}" \
     --lm_train_text "data/${train_set}/text data/local/other_text/text" \
     --bpe_train_text "data/${train_set}/text" "$@"
+    --dumpdir "${dumpdir}"

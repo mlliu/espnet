@@ -119,9 +119,11 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && ! [[ " ${skip_stages} " =~ [
         log "Subsampling ${portion_nutt} utterances for feature dumping."
     else
         _dsets="${train_set} ${other_sets} ${dev_set}"
+	#_dsets="${other_sets} ${dev_set}"
     fi
     for dset in ${_dsets}; do
         echo "Dump SSL ${dset} features to ${featdir}/${feature_type}/${suffix}${dset}"
+	echo "_cmd is ${_cmd}"
         _dump_dir="${featdir}/${feature_type}/${suffix}${dset}"
 
         utils/copy_data_dir.sh --validate_opts --non-print "${datadir}/${dset}" "${_dump_dir}"
@@ -147,7 +149,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && ! [[ " ${skip_stages} " =~ [
             awk '(FILENAME==ARGV[1]){utt2num[$1]=$2} (FILENAME==ARGV[2]){print($1, utt2num[$1])}' \
                 ${datadir}/${dset}/utt2num_samples ${_logdir}/wav.${n}.scp > ${_logdir}/utt2num_samples.${n}
         done
-
+        echo "start dump features logdir is ${_logdir} nj is ${_nj}"
         # shellcheck disable=SC2046,SC2086
         ${_cmd} JOB=1:${_nj} ${_logdir}/dump_features.JOB.log \
             ${python} pyscripts/feats/dump_ssl_feature.py \
@@ -224,6 +226,11 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ] && ! [[ " ${skip_stages} " =~ [
     for dset in "${train_set}" "${dev_set}" ${other_sets}; do
         log "Extract labels to ${featdir}/${feature_type}/${suffix}${dset}"
 
+	# check if the dset is empty
+	if [ -z "${dset}" ]; then
+		continue
+	fi
+
         _dump_dir="${featdir}/${feature_type}/${suffix}${dset}"
 
         _opts=
@@ -273,7 +280,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ] && ! [[ " ${skip_stages} " =~ [
                 --utt2num_samples "${_dump_dir}/logdir/utt2num_samples.JOB" \
                 "scp:${_dump_dir}/logdir/inference_kmeans.JOB.scp" \
                 "ark,t:${_dump_dir}/logdir/pseudo_labels_km${nclusters}.JOB.txt" || exit 1;
-
+        log "concatenate labels to ${featdir}/${feature_type}/${suffix}${dset}"
         # concatenate scp files
         for n in $(seq ${_nj}); do
             cat "${_dump_dir}"/logdir/pseudo_labels_km${nclusters}.${n}.txt || exit 1;
