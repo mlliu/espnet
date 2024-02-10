@@ -6,22 +6,21 @@ set -u
 set -o pipefail
 
 
-kmeans_feature="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone_sp" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
+kmeans_feature="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
 nclusters="2000" #"2000" #"4200" #"4200" #"2500" #2000 or 2500 for hmm in forced_alignment
-kmeans_cluster=false # do we use kmeans cluster as tokenizer, otherwise, we may use gmm or hmm-gmm
+kmeans_cluster=true # do we use kmeans cluster as tokenizer, otherwise, we may use gmm or hmm-gmm
 skip_train=false # skip the training of the model, just for decoding
-speed_perturb="0.9 1.0 1.1"
+speed_perturb= #"0.9 1.0 1.1"
 src_lang=$(echo "${kmeans_feature}_km${nclusters}" | tr "/" "_")
 tgt_lang=en
-skip_4a=false
 
-dataset="librispeech_100"
+dataset="swbd"
 
 # set the data path for swbd
 if [ "${dataset}" = "swbd" ]; then
     train_set="train_nodup"
     train_dev="train_dev"
-    test_sets="train_dev eval2000"
+    test_sets="eval2000"
     dumpdir=/export/fs05/mliu121/espnet_data/swbd/dump
     expdir=/export/fs05/mliu121/espnet_data/swbd/exp
     datadir=/export/fs05/mliu121/espnet_data/swbd/data
@@ -37,14 +36,10 @@ else
     exit 1
 fi
 
-# if speed_perturb is not null, then we use the asr_config for 300 hours of training data,
-# in which the warmup_steps is set to 3 times of the value for 100h.
-if [ -z "${speed_perturb}" ]; then
-    asr_config=conf/train_discrete_asr_e_branchformer1_1gpu.yaml
-else
-    asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_300h.yaml
-fi
 #asr_config=conf/train_discrete_asr_e_branchformer1_1gpu.yaml
+# for swbd dataset, since its training dataset is about 300 hours
+# thus we use the asr_conf for 300h, whose warmup_step is 3 times than 100h
+asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_300h.yaml
 inference_config=conf/decode_ctc0.3.yaml
 src_nbpe=6000 #1500 #6000   # I use src_nbpe=6000 for 2000-cluster kmeans.
 tgt_nbpe=5000   # if token_joint is True, then only tgt_nbpe is used
@@ -84,5 +79,4 @@ tgt_case="ts"
     --dumpdir ${dumpdir} \
     --expdir ${expdir} \
     --datadir ${datadir}
-    --skip_4a ${skip_4a}
     #--gpu_inference true \
