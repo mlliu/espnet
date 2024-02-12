@@ -6,15 +6,24 @@ set -u
 set -o pipefail
 
 
-kmeans_feature="wavlm_large/21"  # use model_type/layer_index
+kmeans_feature="xls_r_1b/35"  # use model_type/layer_index
 nclusters=2000
+kmeans_cluster=true # do we use kmeans cluster as tokenizer, otherwise, we may use gmm or hmm-g
+skip_train=false # skip the training of the model, just for decoding
+skip_4a=false
 
 src_lang=$(echo "${kmeans_feature}_km${nclusters}" | tr "/" "_")
 tgt_lang=en
 
+dataset="challenge"
 train_set="train"
 train_dev="dev"
 test_sets="test_clean test_other dev_clean dev_other test_1h"
+dumpdir=/export/fs05/mliu121/espnet_data/challenge/dump
+expdir=/export/fs05/mliu121/espnet_data/challenge/exp
+datadir=/export/fs05/mliu121/espnet_data/challenge/data
+hmmdir=/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/wavlm_1000beam_nodelta_trans_monostate_monophone/mono
+
 
 asr_config=conf/tuning/train_discrete_asr_e_branchformer1_1gpu_lr5e-4_warmup5k.yaml
 inference_config=conf/decode_ctc0.3.yaml
@@ -28,6 +37,8 @@ src_case="rm"
 tgt_case="ts"
 
 speed_perturb_factors=""
+
+
 
 ./asr2.sh \
     --kmeans_opts "--batch_bins 3600000" \
@@ -43,7 +54,7 @@ speed_perturb_factors=""
     --tgt_nbpe $tgt_nbpe \
     --src_case ${src_case} \
     --tgt_case ${tgt_case} \
-    --audio_format "flac.ark" \
+    --audio_format "flac" \
     --speed_perturb_factors "${speed_perturb_factors}" \
     --asr_config "${asr_config}" \
     --inference_config "${inference_config}" \
@@ -53,4 +64,13 @@ speed_perturb_factors=""
     --use_lm false \
     --src_bpe_train_text "data/${train_set}/text.${src_case}.${src_lang}" \
     --tgt_bpe_train_text "data/${train_set}/text.${tgt_case}.${tgt_lang}" \
-    --lm_train_text "data/${train_set}/text.${tgt_case}.${tgt_lang}" "$@"
+    --lm_train_text "data/${train_set}/text.${tgt_case}.${tgt_lang}" "$@" \
+    --inference_nj 32 \
+    --kmeans_cluster ${kmeans_cluster} \
+    --skip_train  ${skip_train} \
+    --skip_4a ${skip_4a} \
+    --dataset ${dataset} \
+    --dumpdir ${dumpdir} \
+    --expdir ${expdir} \
+    --datadir ${datadir} \
+    --hmmdir ${hmmdir}
