@@ -100,8 +100,8 @@ elif [ "${cmd_backend}" = ssh ]; then
 # Users can modify/add their own command options according to their cluster environments.
 elif [ "${cmd_backend}" = jhu ]; then
 
-    export train_cmd="queue.pl --mem 2G"
-    export cuda_cmd="queue.pl --mem 10G --gpu 1 --hostname 'hostname=c0[124568]*|c1[012456789]*|c2[0146]*' --config conf/queue.conf" # --hostname 'b1[123456789]|b20|c0[1234568]|c1[123456789]|c2[012567]'"  #-freegpu.pl --mem 2G --gpu 1 --config conf/queue.conf"
+    export train_cmd="queue.pl --mem 2G" # 120G
+    export cuda_cmd="queue.pl --mem 10G --gpu 1 --hostname 'hostname=c0[124568]*|c1[12456789]*|c2[01234567]*' --config conf/queue.conf" # --hostname 'b1[123456789]|b20|c0[1234568]|c1[123456789]|c2[012567]'"  #-freegpu.pl --mem 2G --gpu 1 --config conf/queue.conf"
 
     export decode_cmd="queue.pl --mem 40G"
 

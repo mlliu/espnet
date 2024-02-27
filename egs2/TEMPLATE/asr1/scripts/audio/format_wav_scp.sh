@@ -92,7 +92,6 @@ fi
 if [ -n "${vad_based_trim}" ]; then
     opts="--vad_based_trim ${vad_based_trim} "
 fi
-
 if [ -n "${segments}" ]; then
     log "[info]: using ${segments}"
     nutt=$(<${segments} wc -l)
@@ -135,7 +134,6 @@ else
         --multi-columns-output "${multi_columns_output}" \
         "${logdir}/wav.JOB.scp" "${outdir}/format${suffix}.JOB" || { cat $(grep -l -i error "${logdir}"/format_wav_scp.*.log) ; exit 1; }
 fi
-
 # Workaround for the NFS problem
 ls ${outdir}/format.* > /dev/null
 

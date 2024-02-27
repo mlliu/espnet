@@ -6,7 +6,7 @@ set -u
 set -o pipefail
 
 
-kmeans_feature="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
+kmeans_feature="wavlm_large/21" #"hmm_wavlm_1000beam_nodelta_trans_monostate_monophone" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
 nclusters="2000" #"2000" #"4200" #"4200" #"2500" #2000 or 2500 for hmm in forced_alignment
 kmeans_cluster=true # do we use kmeans cluster as tokenizer, otherwise, we may use gmm or hmm-gmm
 skip_train=false # skip the training of the model, just for decoding
@@ -39,7 +39,7 @@ fi
 #asr_config=conf/train_discrete_asr_e_branchformer1_1gpu.yaml
 # for swbd dataset, since its training dataset is about 300 hours
 # thus we use the asr_conf for 300h, whose warmup_step is 3 times than 100h
-asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_300h.yaml
+asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_300h_lr1e42.yaml
 inference_config=conf/decode_ctc0.3.yaml
 src_nbpe=6000 #1500 #6000   # I use src_nbpe=6000 for 2000-cluster kmeans.
 tgt_nbpe=5000   # if token_joint is True, then only tgt_nbpe is used
@@ -78,5 +78,6 @@ tgt_case="ts"
     --skip_train  ${skip_train} \
     --dumpdir ${dumpdir} \
     --expdir ${expdir} \
-    --datadir ${datadir}
+    --datadir ${datadir}\
+    --dataset ${dataset}
     #--gpu_inference true \

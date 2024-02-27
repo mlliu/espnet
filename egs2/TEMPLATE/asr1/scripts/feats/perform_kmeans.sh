@@ -119,7 +119,6 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && ! [[ " ${skip_stages} " =~ [
         log "Subsampling ${portion_nutt} utterances for feature dumping."
     else
         _dsets="${train_set} ${other_sets} ${dev_set}"
-	#_dsets="${other_sets} ${dev_set}"
     fi
     for dset in ${_dsets}; do
         echo "Dump SSL ${dset} features to ${featdir}/${feature_type}/${suffix}${dset}"
@@ -225,7 +224,6 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ] && ! [[ " ${skip_stages} " =~ [
 
     for dset in "${train_set}" "${dev_set}" ${other_sets}; do
         log "Extract labels to ${featdir}/${feature_type}/${suffix}${dset}"
-
 	# check if the dset is empty
 	if [ -z "${dset}" ]; then
 		continue

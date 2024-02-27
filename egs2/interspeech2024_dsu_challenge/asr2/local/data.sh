@@ -55,7 +55,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     log "Combine the training and valid sets"
     mkdir -p data/${train_set}
     mkdir -p data/${train_dev}
-    rm data/${train_set}/* data/${train_dev}/*
+    #rm data/${train_set}/* data/${train_dev}/*
 
     # librispeech_100
     prefix="librispeech-"

@@ -13,7 +13,7 @@ inference_nj=4
 gpu_inference=true
 
 # Config
-duration=10min
+duration=1h #10min
 multilingual=true
 lid=false
 only_lid=true

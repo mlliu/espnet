@@ -205,7 +205,8 @@ if __name__ == "__main__":
     parser.add_argument("--only_lid", type=str2bool, default=False)
 
     args = parser.parse_args()
-    assert args.duration in ["10min", "1h"], "we only "
+    print(args.duration)
+    assert args.duration in ["10min", "1h"],  "we only "
 
     langs_info = {}
 

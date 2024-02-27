@@ -38,10 +38,10 @@ num_nodes=1          # The number of nodes.
 nj=32                # The number of parallel jobs.
 inference_nj=32      # The number of parallel jobs in decoding.
 gpu_inference=false  # Whether to perform gpu decoding.
-dumpdir=/export/fs05/mliu121/espnet_data/librispeech_100_asr1/dump         # Directory to dump features.
-expdir=/export/fs05/mliu121/espnet_data/librispeech_100_asr1/exp
+dumpdir=/export/fs05/mliu121/espnet_data/swbd/dump         # Directory to dump features.
+expdir=/export/fs05/mliu121/espnet_data/swbd/exp
 #datadir=/export/fs05/mliu121/espnet_data/librispeech_asr1_data
-datadir=/export/fs05/mliu121/espnet_data/librispeech_100_asr1/data
+datadir=/export/fs05/mliu121/espnet_data/swbd/data
 #ln -s $datadir data
 # Directory to save experiments.
 python=python3       # Specify python to execute espnet commands.

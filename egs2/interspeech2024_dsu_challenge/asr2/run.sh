@@ -9,14 +9,14 @@ set -o pipefail
 kmeans_feature="xls_r_1b/35"  # use model_type/layer_index
 nclusters=2000
 kmeans_cluster=true # do we use kmeans cluster as tokenizer, otherwise, we may use gmm or hmm-g
-skip_train=false # skip the training of the model, just for decoding
-skip_4a=false
+skip_train=false  # skip the training of the model, just for decoding
+skip_4a=true
 
 src_lang=$(echo "${kmeans_feature}_km${nclusters}" | tr "/" "_")
 tgt_lang=en
 
 dataset="challenge"
-train_set="train"
+train_set="train_clean_100" #"train"
 train_dev="dev"
 test_sets="test_clean test_other dev_clean dev_other test_1h"
 dumpdir=/export/fs05/mliu121/espnet_data/challenge/dump
@@ -25,11 +25,13 @@ datadir=/export/fs05/mliu121/espnet_data/challenge/data
 hmmdir=/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/wavlm_1000beam_nodelta_trans_monostate_monophone/mono
 
 
-asr_config=conf/tuning/train_discrete_asr_e_branchformer1_1gpu_lr5e-4_warmup5k.yaml
+#asr_config=conf/tuning/train_discrete_asr_e_branchformer1_1gpu_lr1e-5_warmup5k.yaml # 5e-4 was used
+asr_config=conf/train_discrete_asr_e_branchformer1_1gpu.yaml
+#asr_config=conf/tuning/train_discrete_asr_e_branchformer1_1gpu_lr1e-4_warmup75k.yaml
 inference_config=conf/decode_ctc0.3.yaml
 
-src_nbpe=3000   # I use src_nbpe=6000 for 2000-cluster kmeans.
-tgt_nbpe=6000   # if token_joint is True, then only tgt_nbpe is used
+src_nbpe=6000   # I use src_nbpe=6000 for 2000-cluster kmeans.
+tgt_nbpe=7000   # if token_joint is True, then only tgt_nbpe is used
 
 # ts: true sequence
 # rm: deduplicated sequence which removes duplicated tokens
