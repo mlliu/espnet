@@ -6,7 +6,7 @@ set -u
 set -o pipefail
 
 
-kmeans_feature="hmm_wavlm_1000beam_nodelta_trans_monostate_tgmed" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
+kmeans_feature="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
 nclusters="2000" #"2000" #"4200" #"4200" #"2500" #2000 or 2500 for hmm in forced_alignment
 kmeans_cluster=false # do we use kmeans cluster as tokenizer, otherwise, we may use gmm or hmm-gmm
 skip_train=false # skip the training of the model, just for decoding

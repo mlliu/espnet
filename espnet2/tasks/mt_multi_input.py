@@ -610,8 +610,8 @@ class MTTask_multi_input(AbsTask):
 
         assert check_return_type(model)
         # register forward hooks for print memory usage
-        for layer in model.children():
-            layer.register_forward_hook(print_memory_usage)
+        #for layer in model.children():
+        #    layer.register_forward_hook(print_memory_usage)
 
         return model
 

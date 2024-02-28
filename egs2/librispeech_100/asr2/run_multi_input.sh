@@ -16,8 +16,9 @@ tgt_lang=en
 skip_4a=false
 
 # define the multi input feature and its type for the model
-feat1="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone_km2000"
-feat2="hmm_wavlm_1000beam_nodelta_trans_monostate_km4200"
+
+feat1="hmm_wavlm_1000beam_nodelta_trans_monostate_km4200"
+feat2="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone_km2000"
 feat3=
 feat4=
 feat1_type="char"
@@ -53,6 +54,7 @@ fi
 # in which the warmup_steps is set to 3 times of the value for 100h.
 if [ -z "${speed_perturb}" ]; then
     asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_multi_input.yaml
+    asr_config_single=conf/train_discrete_asr_e_branchformer1_1gpu.yaml # this one is for stats in step 12
 else
     asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_300h_lr1e56.yaml
 fi
@@ -82,6 +84,7 @@ tgt_case="ts"
     --speed_perturb_factors "${speed_perturb}" \
     --use_lm false \
     --asr_config "${asr_config}" \
+    --asr_config_single "${asr_config_single}" \
     --inference_config "${inference_config}" \
     --train_set "${train_set}" \
     --valid_set "${train_dev}" \

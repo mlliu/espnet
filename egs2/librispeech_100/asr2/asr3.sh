@@ -129,6 +129,7 @@ asr_exp=        # Specify the directory path for ASR experiment.
                 # If this option is specified, asr_tag is ignored.
 asr_stats_dir=  # Specify the directory path for ASR statistics.
 asr_config=     # Config for asr model training.
+asr_config_single=
 asr_args=       # Arguments for asr model training, e.g., "--max_epoch 10".
                 # Note that it will overwrite args in asr config.
 ignore_init_mismatch=false      # Ignore initial mismatch
@@ -1288,12 +1289,114 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~
     build_binary -s ${ngram_exp}/${ngram_num}gram.arpa ${ngram_exp}/${ngram_num}gram.bin
 fi
 
-# set the opt for the training and validation data
-    _opts=
-  # set the opt
 
+if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~ [[:space:]]12[[:space:]] ]]; then
     _asr_train_dir="${data_feats}/${train_set}"
     _asr_valid_dir="${data_feats}/${valid_set}"
+    log "Stage 12: ASR collect stats: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}"
+
+    _opts=
+    if [ -n "${asr_config_single}" ]; then
+        # To generate the config file: e.g.
+        #   % python3 -m espnet2.bin.mt_train --print_config --optim adam
+        _opts+="--config ${asr_config_single} "
+    fi
+
+    # 1. Split the key file
+    _logdir="${asr_stats_dir}/logdir"
+    mkdir -p "${_logdir}"
+
+    #_scp=text.${src_case}.${src_lang}
+
+    # Get the minimum number among ${nj} and the number lines of input files
+    _nj=$(min "${nj}" "$(<${_asr_train_dir}/${_scp} wc -l)" "$(<${_asr_valid_dir}/${_scp} wc -l)")
+    #key_file="${_asr_train_dir}/${_scp}"
+    key_file=${_asr_train_dir}/text.ts.${feat1}
+    split_scps=""
+    for n in $(seq "${_nj}"); do
+        split_scps+=" ${_logdir}/train.${n}.scp"
+    done
+    # shellcheck disable=SC2086
+    echo "${key_file}, and, ${split_scps} and nj=${_nj}"
+    utils/split_scp.pl "${key_file}" ${split_scps}
+
+    #key_file="${_asr_valid_dir}/${_scp}"
+    key_file=${_asr_valid_dir}/text.ts.${feat1}
+    split_scps=""
+    for n in $(seq "${_nj}"); do
+        split_scps+=" ${_logdir}/valid.${n}.scp"
+    done
+    # shellcheck disable=SC2086
+    echo "run split scp second time"
+    utils/split_scp.pl "${key_file}" ${split_scps}
+
+    # 2. Generate run.sh
+    log "Generate '${asr_stats_dir}/run.sh'. You can resume the process from stage 12 using this script"
+    mkdir -p "${asr_stats_dir}"; echo "${run_args} --stage 12 \"\$@\"; exit \$?" > "${asr_stats_dir}/run.sh"; chmod +x "${asr_stats_dir}/run.sh"
+
+    # 3. Submit jobs
+    log "ASR collect-stats started... log: '${_logdir}/stats.*.log'"
+
+    # NOTE: --*_shape_file doesn't require length information if --batch_type=unsorted,
+    #       but it's used only for deciding the sample ids.
+
+    # shellcheck disable=SC2046,SC2086
+#    ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
+#        ${python} -m espnet2.bin.mt_train \
+#            --collect_stats true \
+#            --use_preprocessor true \
+#            --bpemodel "${tgt_bpemodel}" \
+#            --src_bpemodel "${src_bpemodel}" \
+#            --token_type "${tgt_token_type}" \
+#            --src_token_type "${feat1_type}" \
+#            --token_list "${tgt_token_list}" \
+#            --src_token_list "${token_listdir}/${feat1_type}_${feat1}/src_tokens.txt" \
+#            --non_linguistic_symbols "${nlsyms_txt}" \
+#            --cleaner "${cleaner}" \
+#            --g2p "${g2p}" \
+#            --cc "${_asr_train_dir}/text.${tgt_case}.${tgt_lang},text,text" \
+#            --train_data_path_and_name_and_type "${_asr_train_dir}/text.ts.${feat1},src_text,text " \
+#	          --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.${tgt_case}.${tgt_lang},text,text" \
+#	          --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.ts.${feat1},src_text,text" \
+#            --train_shape_file "${_logdir}/train.JOB.scp" \
+#	          --valid_shape_file "${_logdir}/valid.JOB.scp" \
+#            --output_dir "${_logdir}/stats.JOB" \
+#            ${_opts} ${asr_args} || { cat $(grep -l -i error "${_logdir}"/stats.*.log) ; exit 1; }
+#
+#    # 4. Aggregate shape files
+#    _opts=
+#    for i in $(seq "${_nj}"); do
+#        _opts+="--input_dir ${_logdir}/stats.${i} "
+#    done
+#    # shellcheck disable=SC2086
+#    ${python} -m espnet2.bin.aggregate_stats_dirs ${_opts} --output_dir "${asr_stats_dir}"
+
+    # Append the num-tokens at the last dimensions. This is used for batch-bins count
+    src_token_list=${token_listdir}/${feat1_type}_${feat1}/src_tokens.txt
+    <"${asr_stats_dir}/train/text_shape" \
+        awk -v N="$(<${tgt_token_list} wc -l)" '{ print $0 "," N }' \
+        >"${asr_stats_dir}/train/text_shape.${tgt_token_type}"
+
+    <"${asr_stats_dir}/train/src_text_shape" \
+        awk -v N="$(<${src_token_list} wc -l)" '{ print $0 "," N }' \
+        >"${asr_stats_dir}/train/src_text_shape.${src_token_type}"
+
+    <"${asr_stats_dir}/valid/text_shape" \
+        awk -v N="$(<${tgt_token_list} wc -l)" '{ print $0 "," N }' \
+        >"${asr_stats_dir}/valid/text_shape.${tgt_token_type}"
+
+    <"${asr_stats_dir}/valid/src_text_shape" \
+        awk -v N="$(<${src_token_list} wc -l)" '{ print $0 "," N }' \
+        >"${asr_stats_dir}/valid/src_text_shape.${src_token_type}"
+fi
+
+if [ ${stage} -le 13 ] && [ ${stop_stage} -ge 13 ] && ! [[ " ${skip_stages} " =~ [[:space:]]13[[:space:]] ]]; then
+    _asr_train_dir="${data_feats}/${train_set}"
+    _asr_valid_dir="${data_feats}/${valid_set}"
+    log "Stage 13: ASR Training: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}"
+
+    # set the opt for the training and validation data
+    _opts=
     # if feat1 exists, then set the opt
     if  [ -n "${feat1}" ]; then
         _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/text.ts.${feat1},src_text_1,text "
@@ -1325,167 +1428,21 @@ fi
     _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/text.${tgt_case}.${tgt_lang},text,text "
     _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/text.${tgt_case}.${tgt_lang},text,text "
 
+    _opts+="--train_shape_file ${asr_stats_dir}/train/src_text_shape.${feat1_type} "
+    _opts+="--train_shape_file ${asr_stats_dir}/train/text_shape.${tgt_token_type} "
+    _opts+="--valid_shape_file ${asr_stats_dir}/valid/src_text_shape.${feat1_type} "
+    _opts+="--valid_shape_file ${asr_stats_dir}/valid/text_shape.${tgt_token_type} "
+
     #    _opts+="--src_bpemodel_1  "
 #    _opts+="--src_bpemodel_2  "
 #    _opts+="--src_bpemodel_3  "
 #    _opts+="--src_bpemodel_4  "
 
-if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~ [[:space:]]12[[:space:]] ]]; then
-    _asr_train_dir="${data_feats}/${train_set}"
-    _asr_valid_dir="${data_feats}/${valid_set}"
-    log "Stage 12: ASR collect stats: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}"
-
-    #_opts=
     if [ -n "${asr_config}" ]; then
         # To generate the config file: e.g.
         #   % python3 -m espnet2.bin.mt_train --print_config --optim adam
         _opts+="--config ${asr_config} "
     fi
-
-    # 1. Split the key file
-    _logdir="${asr_stats_dir}/logdir"
-    mkdir -p "${_logdir}"
-#
-#    _scp=text.${src_case}.${src_lang}
-#
-#    # Get the minimum number among ${nj} and the number lines of input files
-#    _nj=${nj} #$(min "${nj}" "$(<${_asr_train_dir}/${_scp} wc -l)" "$(<${_asr_valid_dir}/${_scp} wc -l)")
-#    key_file="${_asr_train_dir}/${_scp}"
-#    split_scps=""
-#    for n in $(seq "${_nj}"); do
-#        split_scps+=" ${_logdir}/train.${n}.scp"
-#    done
-#    # shellcheck disable=SC2086
-#    echo "${key_file}, and, ${split_scps} and nj=${_nj}"
-#    utils/split_scp.pl "${key_file}" ${split_scps}
-#
-#    key_file="${_asr_valid_dir}/${_scp}"
-#    split_scps=""
-#    for n in $(seq "${_nj}"); do
-#        split_scps+=" ${_logdir}/valid.${n}.scp"
-#    done
-#    # shellcheck disable=SC2086
-#    echo "run split scp second time"
-#    utils/split_scp.pl "${key_file}" ${split_scps}
-#
-#    # 2. Generate run.sh
-#    log "Generate '${asr_stats_dir}/run.sh'. You can resume the process from stage 12 using this script"
-#    mkdir -p "${asr_stats_dir}"; echo "${run_args} --stage 12 \"\$@\"; exit \$?" > "${asr_stats_dir}/run.sh"; chmod +x "${asr_stats_dir}/run.sh"
-
-    # 3. Submit jobs
-    log "ASR collect-stats started... log: '${_logdir}/stats.*.log'"
-
-
-    # NOTE: --*_shape_file doesn't require length information if --batch_type=unsorted,
-    #       but it's used only for deciding the sample ids.
-
-    # shellcheck disable=SC2046,SC2086
-#    ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
-#        ${python} -m espnet2.bin.mt_multi_input_train \
-#            --collect_stats true \
-#            --use_preprocessor true \
-#            --bpemodel "${tgt_bpemodel}" \
-#            --token_type "${tgt_token_type}" \
-#            --token_list "${tgt_token_list}" \
-#            --non_linguistic_symbols "${nlsyms_txt}" \
-#            --cleaner "${cleaner}" \
-#            --g2p "${g2p}" \
-#            --train_shape_file "${_logdir}/train.JOB.scp" \
-#	          --valid_shape_file "${_logdir}/valid.JOB.scp" \
-#            --output_dir "${_logdir}/stats.JOB" \
-#            ${_opts} ${asr_args} || { cat $(grep -l -i error "${_logdir}"/stats.*.log) ; exit 1; }
-       ${python} -m espnet2.bin.mt_multi_input_train \
-            --collect_stats true \
-            --use_preprocessor true \
-            --bpemodel "${tgt_bpemodel}" \
-            --token_type "${tgt_token_type}" \
-            --token_list "${tgt_token_list}" \
-            --non_linguistic_symbols "${nlsyms_txt}" \
-            --cleaner "${cleaner}" \
-            --g2p "${g2p}" \
-            --output_dir "${_logdir}/stats" \
-            ${_opts} ${asr_args} || exit 1;
-            #${_opts} ${asr_args} || { cat $(grep -l -i error "${_logdir}"/stats.*.log) ; exit 1; }
-
-#    # 4. Aggregate shape files
-#    _opts=
-#    for i in $(seq "${_nj}"); do
-#        _opts+="--input_dir ${_logdir}/stats.${i} "
-#    done
-#    # shellcheck disable=SC2086
-#    ${python} -m espnet2.bin.aggregate_stats_dirs ${_opts} --output_dir "${asr_stats_dir}"
-#
-#    # Append the num-tokens at the last dimensions. This is used for batch-bins count
-#    <"${asr_stats_dir}/train/text_shape" \
-#        awk -v N="$(<${tgt_token_list} wc -l)" '{ print $0 "," N }' \
-#        >"${asr_stats_dir}/train/text_shape.${tgt_token_type}"
-#
-#    <"${asr_stats_dir}/train/src_text_shape" \
-#        awk -v N="$(<${src_token_list} wc -l)" '{ print $0 "," N }' \
-#        >"${asr_stats_dir}/train/src_text_shape.${src_token_type}"
-#
-#    <"${asr_stats_dir}/valid/text_shape" \
-#        awk -v N="$(<${tgt_token_list} wc -l)" '{ print $0 "," N }' \
-#        >"${asr_stats_dir}/valid/text_shape.${tgt_token_type}"
-#
-#    <"${asr_stats_dir}/valid/src_text_shape" \
-#        awk -v N="$(<${src_token_list} wc -l)" '{ print $0 "," N }' \
-#        >"${asr_stats_dir}/valid/src_text_shape.${src_token_type}"
-fi
-
-
-if [ ${stage} -le 13 ] && [ ${stop_stage} -ge 13 ] && ! [[ " ${skip_stages} " =~ [[:space:]]13[[:space:]] ]]; then
-    _asr_train_dir="${data_feats}/${train_set}"
-    _asr_valid_dir="${data_feats}/${valid_set}"
-    log "Stage 13: ASR Training: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}"
-
-    #_opts=
-    if [ -n "${asr_config}" ]; then
-        # To generate the config file: e.g.
-        #   % python3 -m espnet2.bin.mt_train --print_config --optim adam
-        _opts+="--config ${asr_config} "
-    fi
-
-#    if [ "${num_splits_asr}" -gt 1 ]; then
-#        # If you met a memory error when parsing text files, this option may help you.
-#        # The corpus is split into subsets and each subset is used for training one by one in order,
-#        # so the memory footprint can be limited to the memory required for each dataset.
-#
-#        _split_dir="${asr_stats_dir}/splits${num_splits_asr}"
-#        if [ ! -f "${_split_dir}/.done" ]; then
-#            rm -f "${_split_dir}/.done"
-#            ${python} -m espnet2.bin.split_scps \
-#                --scps \
-#                    "${_asr_train_dir}/${_scp}" \
-#                    "${_asr_train_dir}/text.${tgt_case}.${tgt_lang}" \
-#                    "${_asr_train_dir}/text.${src_case}.${src_lang}" \
-#                    "${asr_stats_dir}/train/text_shape.${tgt_token_type}" \
-#                    "${asr_stats_dir}/train/src_text_shape.${src_token_type}" \
-#                --num_splits "${num_splits_asr}" \
-#                --output_dir "${_split_dir}"
-#            touch "${_split_dir}/.done"
-#        else
-#            log "${_split_dir}/.done exists. Spliting is skipped"
-#        fi
-#
-#        _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/text.${src_case}.${src_lang},src_text,text "
-#        _opts+="--train_data_path_and_name_and_type ${_split_dir}/text.${tgt_case}.${tgt_lang},text,text "
-#        _opts+="--train_shape_file ${_split_dir}/src_text_shape.${src_token_type} "
-#        _opts+="--train_shape_file ${_split_dir}/text_shape.${tgt_token_type} "
-#        _opts+="--multiple_iterator true "
-#    else
-#        #_opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/text.${src_case}.${src_lang},src_text,text "
-#        _opts+="--train_data_path_and_name_and_type ${_split_dir}/text.ts.hmm_wavlm_1000beam_nodelta_trans_monostate_monophone_km2000,src_text_1,text "
-#        _opts+="--train_data_path_and_name_and_type ${_split_dir}/text.ts.hmm_wavlm_1000beam_nodelta_trans_monostate_km4200,src_text_2,text "
-#        _opts+="--train_data_path_and_name_and_type ${_split_dir}/text.${src_case}.${src_lang},src_text_3,text "
-#        _opts+="--train_data_path_and_name_and_type ${_split_dir}/text.${src_case}.${src_lang},src_text_4,text "
-#
-#        _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/text.${tgt_case}.${tgt_lang},text,text "
-#        _opts+="--train_shape_file ${asr_stats_dir}/train/src_text_shape.${src_token_type} "
-#        _opts+="--train_shape_file ${asr_stats_dir}/train/text_shape.${tgt_token_type} "
-#    fi
-
-
 
 
     log "Generate '${asr_exp}/run.sh'. You can resume the process from stage 13 using this script"
@@ -1517,10 +1474,6 @@ if [ ${stage} -le 13 ] && [ ${stop_stage} -ge 13 ] && ! [[ " ${skip_stages} " =~
             --non_linguistic_symbols "${nlsyms_txt}" \
             --cleaner "${cleaner}" \
             --g2p "${g2p}" \
-            --train_shape_file ${asr_stats_dir}/train/src_text_shape \
-            --train_shape_file ${asr_stats_dir}/train/text_shape \
-            --valid_shape_file "${asr_stats_dir}/valid/text_shape" \
-            --valid_shape_file "${asr_stats_dir}/valid/src_text_shape" \
             --resume true \
             --ignore_init_mismatch ${ignore_init_mismatch} \
             --fold_length "${asr_text_fold_length}" \

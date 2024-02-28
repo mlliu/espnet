@@ -122,7 +122,6 @@ class Embedding_multi_input(AbsFrontend):
         """
         #x = self.embed(input)
         # input shape is (B, T, 2)
-        print("input shape: ", input.shape)
         x1 = self.embed1(input[:,:,0])
         x2 = self.embed2(input[:,:,1])
         x = torch.cat((x1, x2), dim=2) # (B, T, 2*D)
@@ -140,7 +139,6 @@ class Embedding_multi_input(AbsFrontend):
 
         # add a linear projection layer, to project the input x to (B, T, D)
         x = self.linear(x)
-        print("x shape after linear: ", x.shape) # (B, T, D)
 
         x = self.pos_enc(x)
 

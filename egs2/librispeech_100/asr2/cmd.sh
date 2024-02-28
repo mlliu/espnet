@@ -101,7 +101,7 @@ elif [ "${cmd_backend}" = ssh ]; then
 elif [ "${cmd_backend}" = jhu ]; then
 
     export train_cmd="queue.pl --mem 2G"
-    export cuda_cmd="queue.pl --mem 10G --gpu 1 --hostname 'hostname=c0[1245678]*|c1[012456789]*|c2[012345678]*' --config conf/queue.conf" # --hostname 'b1[123456789]|b20|c0[1234568]|c1[123456789]|c2[012567]'"  #-freegpu.pl --mem 2G --gpu 1 --config conf/queue.conf"
+    export cuda_cmd="queue.pl --mem 10G --gpu 1 --hostname 'hostname=c0[12345689]*|c1[2456789]*|c2[01234568]*' --config conf/queue.conf" # --hostname 'b1[123456789]|b20|c0[1234568]|c1[123456789]|c2[012567]'"  #-freegpu.pl --mem 2G --gpu 1 --config conf/queue.conf"
 
     export decode_cmd="queue.pl --mem 40G"
 
