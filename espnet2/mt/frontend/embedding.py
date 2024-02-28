@@ -95,12 +95,12 @@ class Embedding_multi_input(AbsFrontend):
         # self.embed2 = torch.nn.Embedding(input_size[1], embed_dim)
         # self.pos_enc = pos_enc_class(embed_dim, positional_dropout_rate)
         self.num_inputs = 0
-        # for i, size in enumerate(input_size):
-        #     if size is not None:
-        #         setattr(self, f'embed{i+1}', torch.nn.Embedding(size, embed_dim))
-        #         self.num_inputs += 1
-        self.embed_1 = torch.nn.Embedding(input_size[0], embed_dim)
-        self.embed_2 = torch.nn.Embedding(input_size[1], embed_dim)
+        for i, size in enumerate(input_size):
+            if size is not None:
+                setattr(self, f'embed{i+1}', torch.nn.Embedding(size, embed_dim))
+                self.num_inputs += 1
+        # self.embed_1 = torch.nn.Embedding(input_size[0], embed_dim)
+        # self.embed_2 = torch.nn.Embedding(input_size[1], embed_dim)
         self.linear = torch.nn.Linear(self.num_inputs*embed_dim, embed_dim)
         # self.linear = torch.nn.Linear(2*embed_dim, embed_dim)
         self.pos_enc = pos_enc_class(embed_dim, positional_dropout_rate)
@@ -122,12 +122,12 @@ class Embedding_multi_input(AbsFrontend):
         """
         #x = self.embed(input)
         # input shape is (B, T, 2)
-        x1 = self.embed1(input[:,:,0])
-        x2 = self.embed2(input[:,:,1])
-        x = torch.cat((x1, x2), dim=2) # (B, T, 2*D)
-        # x = []
-        # for i in range(self.num_inputs):
-        #     x.append(getattr(self, f'embed{i+1}')(input[:,:,i]))
+        # x1 = self.embed1(input[:,:,0])
+        # x2 = self.embed2(input[:,:,1])
+        # x = torch.cat((x1, x2), dim=2) # (B, T, 2*D)
+        x = []
+        for i in range(self.num_inputs):
+            x.append(getattr(self, f'embed{i+1}')(input[:,:,i]))
 
         # to save memory, we can use the following line instead of the for loop
         #x = [getattr(self, f'embed{i+1}')(input[:,:,i]) for i in range(self.num_inputs)]
@@ -135,7 +135,7 @@ class Embedding_multi_input(AbsFrontend):
         # after that, we can delete the input 'input' to save memory
         # del input
         #
-        # x = torch.cat(x, dim=2)  # (B, T, self.num_inputs*D)
+        x = torch.cat(x, dim=2)  # (B, T, self.num_inputs*D)
 
         # add a linear projection layer, to project the input x to (B, T, D)
         x = self.linear(x)

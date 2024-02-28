@@ -1559,20 +1559,44 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
         _logdir="${_dir}/logdir"
         mkdir -p "${_logdir}"
 
-        _scp=text.${src_case}.${src_lang}
-	echo "decodeing the file ${_scp}"
+#        _scp=text.${src_case}.${src_lang}
+#
+#	      echo "decodeing the file ${_scp}"
+#
+#        # 1. Split the key file
+#        key_file=${_data}/${_scp}
+#        split_scps=""
+#        _nj=$(min "${inference_nj}" "$(<${key_file} wc -l)")
+#        asr_inference_tool="espnet2.bin.mt_multi_input_inference"
+#
+#        for n in $(seq "${_nj}"); do
+#            split_scps+=" ${_logdir}/keys.${n}.scp"
+#        done
+#        # shellcheck disable=SC2086
+#        utils/split_scp.pl "${key_file}" ${split_scps}
 
-        # 1. Split the key file
-        key_file=${_data}/${_scp}
-        split_scps=""
-        _nj=$(min "${inference_nj}" "$(<${key_file} wc -l)")
-        asr_inference_tool="espnet2.bin.mt_multi_input_inference"
+        # since I have several input features, I need to split the key file for each input feature
+        if [ -n "${feat1}" ]; then
+            key_file=${_data}/text.ts.${feat1}
+            split_scps=""
+            _nj=$(min "${inference_nj}" "$(<${key_file} wc -l)")
+            for n in $(seq "${_nj}"); do
+                split_scps+=" ${_logdir}/keys.${n}.scp"
+            done
+            # shellcheck disable=SC2086
+            utils/split_scp.pl "${key_file}" ${split_scps}
+            _opts+="--data_path_and_name_and_type ${_data}/text.ts.${feat1},src_text_1,text "
+        fi
+        if [ -n "${feat2}" ]; then
+            _opts+="--data_path_and_name_and_type ${_data}/text.ts.${feat2},src_text_2,text "
+        fi
+        if [ -n "${feat3}" ]; then
+            _opts+="--data_path_and_name_and_type ${_data}/text.ts.${feat3},src_text_3,text "
+        fi
+        if [ -n "${feat4}" ]; then
+            _opts+="--data_path_and_name_and_type ${_data}/text.ts.${feat4},src_text_4,text "
+        fi
 
-        for n in $(seq "${_nj}"); do
-            split_scps+=" ${_logdir}/keys.${n}.scp"
-        done
-        # shellcheck disable=SC2086
-        utils/split_scp.pl "${key_file}" ${split_scps}
 
         # 2. Submit decoding jobs
         log "Decoding started... log: '${_logdir}/asr_inference.*.log'"
@@ -1582,7 +1606,6 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
             ${python} -m ${asr_inference_tool} \
                 --batch_size ${batch_size} \
                 --ngpu "${_ngpu}" \
-                --data_path_and_name_and_type "${_data}/${_scp},src_text,text" \
                 --key_file "${_logdir}"/keys.JOB.scp \
                 --mt_train_config "${asr_exp}"/config.yaml \
                 --mt_model_file "${asr_exp}"/"${inference_asr_model}" \
