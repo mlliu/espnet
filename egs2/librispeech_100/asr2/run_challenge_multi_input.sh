@@ -6,7 +6,7 @@ set -u
 set -o pipefail
 
 
-kmeans_feature="hmm_triphone_pdfid_triphone_phoneid" #"hmm_monophone_gaussid_monophone_phoneid" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
+kmeans_feature="hmm_challenge_wavlm_monophone_gaussid_wav2vec_monophone_gaussid" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
 nclusters="2000" #"2000" #"4200" #"4200" #"2500" #2000 or 2500 for hmm in forced_alignment
 kmeans_cluster=true # do we use kmeans cluster as tokenizer, otherwise, we may use gmm or hmm-gmm
 skip_train=false # skip the training of the model, just for decoding
@@ -19,12 +19,8 @@ skip_4a=false
 
 #feat1="hmm_wavlm_1000beam_nodelta_trans_monostate_km4200"
 #feat2="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone_km2000"
-#feat1="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone_km2000"
-#feat2="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone_phoneid_km2000"
-feat1="hmm_wavlm_1000beam_nodelta_trans_monostate_km4200"
-feat2="hmm_wavlm_1000beam_nodelta_trans_monostate_phoneid_km4200"
-
-
+feat1="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone_km2000"
+feat2="hmm_wav2vec_1000beam_nodelta_trans_monostate_monophone_gaussid_km4200"
 feat3=
 feat4=
 feat1_type="char"
@@ -34,32 +30,21 @@ feat4_type=
 
 
 
-dataset="librispeech_100"
+dataset="challenge"
 
-# set the data path for swbd
-if [ "${dataset}" = "swbd" ]; then
-    train_set="train_nodup"
-    train_dev="train_dev"
-    test_sets="train_dev eval2000"
-    dumpdir=/export/fs05/mliu121/espnet_data/swbd/dump
-    expdir=/export/fs05/mliu121/espnet_data/swbd/exp
-    datadir=/export/fs05/mliu121/espnet_data/swbd/data
-elif [ "${dataset}" = "librispeech_100" ]; then
-    train_set="train_clean_100"
-    train_dev="dev"
-    test_sets="test_clean test_other dev_clean dev_other"
-    dumpdir=/export/fs05/mliu121/espnet_data/librispeech_100_asr2/dump
-    expdir=/export/fs05/mliu121/espnet_data/librispeech_100_asr2/exp
-    datadir=/export/fs05/mliu121/espnet_data/librispeech_100_asr2/data
-else
-    echo "unknown dataset=${dataset}"
-    exit 1
-fi
+train_set="train"
+train_dev="dev"
+test_sets="test_clean test_other dev_clean dev_other test_1h"
+dumpdir=/export/fs05/mliu121/espnet_data/challenge/dump
+expdir=/export/fs05/mliu121/espnet_data/challenge/exp
+datadir=/export/fs05/mliu121/espnet_data/challenge/data
 
 # if speed_perturb is not null, then we use the asr_config for 300 hours of training data,
 # in which the warmup_steps is set to 3 times of the value for 100h.
 if [ -z "${speed_perturb}" ]; then
-    asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_multi_input.yaml
+    #asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_multi_input.yaml
+    #asr_config=conf/tuning/train_discrete_asr_e_branchformer1_1gpu_lr5e-4_warmup5k_multi_input.yaml
+    asr_config=conf/tuning/train_discrete_asr_e_branchformer1_3gpu_lr5e-4_warmup5k_multi_input.yaml
     asr_config_single=conf/train_discrete_asr_e_branchformer1_1gpu.yaml # this one is for stats in step 12
 else
     asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_300h_lr1e56.yaml
@@ -67,7 +52,7 @@ fi
 #asr_config=conf/train_discrete_asr_e_branchformer1_1gpu.yaml
 inference_config=conf/decode_ctc0.3.yaml
 src_nbpe=6000 #1500 #6000   # I use src_nbpe=6000 for 2000-cluster kmeans.
-tgt_nbpe=5000   # if token_joint is True, then only tgt_nbpe is used
+tgt_nbpe=7000 # 5000   # if token_joint is True, then only tgt_nbpe is used
 
 # ts: true sequence
 # rm: deduplicated sequence which removes duplicated tokens
@@ -78,7 +63,7 @@ tgt_case="ts"
     --kmeans_opts "--batch_bins 2400000 --nj 1" \
     --kmeans_feature "${kmeans_feature}" \
     --nclusters "${nclusters}" \
-    --ngpu 1 \
+    --ngpu 3 \
     --src_lang ${src_lang} \
     --tgt_lang ${tgt_lang} \
     --src_token_type "char" \
@@ -87,6 +72,7 @@ tgt_case="ts"
     --tgt_nbpe $tgt_nbpe \
     --src_case ${src_case} \
     --tgt_case ${tgt_case} \
+    --audio_format "flac" \
     --speed_perturb_factors "${speed_perturb}" \
     --use_lm false \
     --asr_config "${asr_config}" \

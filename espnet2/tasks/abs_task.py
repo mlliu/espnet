@@ -974,7 +974,11 @@ class AbsTask(ABC):
                     args.exclude_weight_decay_conf,
                 )
             else:
+                # print("just make sure that this step is goding to used during retraining")
+                # print("optim_class",optim_class)
+                # print("optim_conf",args.optim_conf)
                 optim = optim_class(model.parameters(), **args.optim_conf)
+                # optim = optim_class(model.parameters(),capturable=True, **args.optim_conf )
 
         optimizers = [optim]
         return optimizers
@@ -1233,6 +1237,15 @@ class AbsTask(ABC):
                     f"model must inherit {AbsESPnetModel.__name__},"
                     f" but got {type(model)}"
                 )
+            #check the cuda device index
+            print("torch cuda device index: ", torch.cuda.current_device())
+            #if current device index is 0, set the device index to 1
+            if torch.cuda.current_device() == 0:
+                torch.cuda.set_device(2)
+                print("torch cuda device index: ", torch.cuda.current_device())
+            if torch.cuda.current_device() == 1:
+                torch.cuda.set_device(3)
+                print("torch cuda device index: ", torch.cuda.current_device())
             model = model.to(
                 dtype=getattr(torch, args.train_dtype),
                 device="cuda" if args.ngpu > 0 else "cpu",

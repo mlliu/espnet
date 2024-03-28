@@ -44,9 +44,9 @@ fisher_dir="${SWBD}/LDC2004T19 ${SWBD}/LDC2005T19 ${SWBD}/LDC2004S13 ${SWBD}/LDC
 
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     log " Data Preparation"
-    #local/swbd1_data_download.sh ${swbd1_dir}
-    #local/swbd1_prepare_dict.sh
-    #local/swbd1_data_prep.sh ${swbd1_dir}
+    local/swbd1_data_download.sh ${swbd1_dir}
+    local/swbd1_prepare_dict.sh
+    local/swbd1_data_prep.sh ${swbd1_dir}
     local/eval2000_data_prep.sh ${eval2000_dir}
     if [ -n "${fisher_dir}" ]; then
          local/fisher_data_prep.sh ${fisher_dir}

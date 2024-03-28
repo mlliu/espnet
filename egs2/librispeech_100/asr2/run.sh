@@ -6,18 +6,19 @@ set -u
 set -o pipefail
 
 
-kmeans_feature="hmm_wavlm_1000beam_nodelta_trans_monostate_monophone" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
-nclusters="2000" #"2000" #"4200" #"4200" #"2500" #2000 or 2500 for hmm in forced_alignment
+kmeans_feature="hmm_wavlm_1000beam_nodelta_trans_monostate_phoneid" #"gmm" #"hmm_pca80_wavlm_1000beam_nodelta_trans" #_monostate" #"hmm_wavlm_nodelta_1000beam_decode_phonelm/tri3b"  #"hmm_decode_phonelm/tri4b" #"hmm_pca80_wavlm_decode_phonelm/tri4b" #"wavlm_large/21"  # use model_type/layer_index, hmm
+nclusters="4200" #"2000" #"4200" #"4200" #"2500" #2000 or 2500 for hmm in forced_alignment
 kmeans_cluster=false # do we use kmeans cluster as tokenizer, otherwise, we may use gmm or hmm-gmm
 skip_train=false # skip the training of the model, just for decoding
 speed_perturb= #"0.9 1.0 1.1"
 src_lang=$(echo "${kmeans_feature}_km${nclusters}" | tr "/" "_")
 tgt_lang=en
 skip_4a=false
+skip_7a=true
 
 dataset="librispeech_100"
-hmmdir=/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/wavlm_1000beam_nodelta_trans_monostate/tri4b_4200
-
+#hmmdir=/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/wavlm_1000beam_nodelta_trans_monostate/tri4b_4200
+hmmdir=/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/wavlm_1000beam_nodelta_trans_monostate_monophone/mono/decode_phonelm_train_clean_100/mono_train_clean_100_decode_phones_alignment
 # set the data path for swbd
 if [ "${dataset}" = "swbd" ]; then
     train_set="train_nodup"
@@ -41,7 +42,8 @@ fi
 # if speed_perturb is not null, then we use the asr_config for 300 hours of training data,
 # in which the warmup_steps is set to 3 times of the value for 100h.
 if [ -z "${speed_perturb}" ]; then
-    asr_config=conf/train_discrete_asr_e_branchformer1_1gpu.yaml
+#    asr_config=conf/train_discrete_asr_e_branchformer1_1gpu.yaml
+    asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_singletoken.yaml
 else
     asr_config=conf/train_discrete_asr_e_branchformer1_1gpu_300h_lr1e42.yaml
 fi
@@ -86,5 +88,6 @@ tgt_case="ts"
     --expdir ${expdir} \
     --datadir ${datadir} \
     --skip_4a ${skip_4a} \
-    --hmmdir ${hmmdir}
-    #--gpu_inference true \
+    --hmmdir ${hmmdir} \
+    --skip_7a ${skip_7a}
+#    --gpu_inference true

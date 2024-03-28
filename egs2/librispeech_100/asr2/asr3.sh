@@ -1341,35 +1341,35 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
     #       but it's used only for deciding the sample ids.
 
     # shellcheck disable=SC2046,SC2086
-#    ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
-#        ${python} -m espnet2.bin.mt_train \
-#            --collect_stats true \
-#            --use_preprocessor true \
-#            --bpemodel "${tgt_bpemodel}" \
-#            --src_bpemodel "${src_bpemodel}" \
-#            --token_type "${tgt_token_type}" \
-#            --src_token_type "${feat1_type}" \
-#            --token_list "${tgt_token_list}" \
-#            --src_token_list "${token_listdir}/${feat1_type}_${feat1}/src_tokens.txt" \
-#            --non_linguistic_symbols "${nlsyms_txt}" \
-#            --cleaner "${cleaner}" \
-#            --g2p "${g2p}" \
-#            --cc "${_asr_train_dir}/text.${tgt_case}.${tgt_lang},text,text" \
-#            --train_data_path_and_name_and_type "${_asr_train_dir}/text.ts.${feat1},src_text,text " \
-#	          --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.${tgt_case}.${tgt_lang},text,text" \
-#	          --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.ts.${feat1},src_text,text" \
-#            --train_shape_file "${_logdir}/train.JOB.scp" \
-#	          --valid_shape_file "${_logdir}/valid.JOB.scp" \
-#            --output_dir "${_logdir}/stats.JOB" \
-#            ${_opts} ${asr_args} || { cat $(grep -l -i error "${_logdir}"/stats.*.log) ; exit 1; }
-#
-#    # 4. Aggregate shape files
-#    _opts=
-#    for i in $(seq "${_nj}"); do
-#        _opts+="--input_dir ${_logdir}/stats.${i} "
-#    done
-#    # shellcheck disable=SC2086
-#    ${python} -m espnet2.bin.aggregate_stats_dirs ${_opts} --output_dir "${asr_stats_dir}"
+    ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
+        ${python} -m espnet2.bin.mt_train \
+            --collect_stats true \
+            --use_preprocessor true \
+            --bpemodel "${tgt_bpemodel}" \
+            --src_bpemodel "${src_bpemodel}" \
+            --token_type "${tgt_token_type}" \
+            --src_token_type "${feat1_type}" \
+            --token_list "${tgt_token_list}" \
+            --src_token_list "${token_listdir}/${feat1_type}_${feat1}/src_tokens.txt" \
+            --non_linguistic_symbols "${nlsyms_txt}" \
+            --cleaner "${cleaner}" \
+            --g2p "${g2p}" \
+            --train_data_path_and_name_and_type "${_asr_train_dir}/text.${tgt_case}.${tgt_lang},text,text" \
+            --train_data_path_and_name_and_type "${_asr_train_dir}/text.ts.${feat1},src_text,text " \
+	          --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.${tgt_case}.${tgt_lang},text,text" \
+	          --valid_data_path_and_name_and_type "${_asr_valid_dir}/text.ts.${feat1},src_text,text" \
+            --train_shape_file "${_logdir}/train.JOB.scp" \
+	          --valid_shape_file "${_logdir}/valid.JOB.scp" \
+            --output_dir "${_logdir}/stats.JOB" \
+            ${_opts} ${asr_args} || { cat $(grep -l -i error "${_logdir}"/stats.*.log) ; exit 1; }
+
+    # 4. Aggregate shape files
+    _opts=
+    for i in $(seq "${_nj}"); do
+        _opts+="--input_dir ${_logdir}/stats.${i} "
+    done
+    # shellcheck disable=SC2086
+    ${python} -m espnet2.bin.aggregate_stats_dirs ${_opts} --output_dir "${asr_stats_dir}"
 
     # Append the num-tokens at the last dimensions. This is used for batch-bins count
     src_token_list=${token_listdir}/${feat1_type}_${feat1}/src_tokens.txt
@@ -1459,7 +1459,7 @@ if [ ${stage} -le 13 ] && [ ${stop_stage} -ge 13 ] && ! [[ " ${skip_stages} " =~
 
     # TODO(jiatong): fix bpe
     # shellcheck disable=SC2086
-    ${python} -m espnet2.bin.launch \
+    CUDA_VISIBLE_DEVICES=2,3,4 ${python} -m espnet2.bin.launch \
         --cmd "${cuda_cmd} --name ${jobname}" \
         --log "${asr_exp}"/train.log \
         --ngpu "${ngpu}" \
@@ -1479,6 +1479,7 @@ if [ ${stage} -le 13 ] && [ ${stop_stage} -ge 13 ] && ! [[ " ${skip_stages} " =~
             --fold_length "${asr_text_fold_length}" \
             --fold_length "${asr_text_fold_length}" \
             --output_dir "${asr_exp}" \
+            --allow_variable_data_keys true \
             ${_opts} ${asr_args}
 
 fi
@@ -1527,22 +1528,7 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
         _ngpu=0
     fi
 
-    _opts=
-    if [ -n "${inference_config}" ]; then
-        _opts+="--config ${inference_config} "
-    fi
-    if "${use_lm}"; then
-        if "${use_word_lm}"; then
-            _opts+="--word_lm_train_config ${lm_exp}/config.yaml "
-            _opts+="--word_lm_file ${lm_exp}/${inference_lm} "
-        else
-            _opts+="--lm_train_config ${lm_exp}/config.yaml "
-            _opts+="--lm_file ${lm_exp}/${inference_lm} "
-        fi
-    fi
-    if "${use_ngram}"; then
-        _opts+="--ngram_file ${ngram_exp}/${inference_ngram}"
-    fi
+
 
     # 2. Generate run.sh
     log "Generate '${asr_exp}/${inference_tag}/run.sh'. You can resume the process from stage 14 using this script"
@@ -1554,6 +1540,23 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
         _dsets="${test_sets}"
     fi
     for dset in ${_dsets}; do
+        _opts=
+        if [ -n "${inference_config}" ]; then
+            _opts+="--config ${inference_config} "
+        fi
+        if "${use_lm}"; then
+            if "${use_word_lm}"; then
+                _opts+="--word_lm_train_config ${lm_exp}/config.yaml "
+                _opts+="--word_lm_file ${lm_exp}/${inference_lm} "
+            else
+                _opts+="--lm_train_config ${lm_exp}/config.yaml "
+                _opts+="--lm_file ${lm_exp}/${inference_lm} "
+            fi
+        fi
+        if "${use_ngram}"; then
+            _opts+="--ngram_file ${ngram_exp}/${inference_ngram}"
+        fi
+
         _data="${data_feats}/${dset}"
         _dir="${asr_exp}/${inference_tag}/${dset}"
         _logdir="${_dir}/logdir"
@@ -1601,7 +1604,8 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
         # 2. Submit decoding jobs
         log "Decoding started... log: '${_logdir}/asr_inference.*.log'"
         # shellcheck disable=SC2046,SC2086
-        #${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
+        #${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \\
+        asr_inference_tool="espnet2.bin.mt_multi_input_inference"
 	${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
             ${python} -m ${asr_inference_tool} \
                 --batch_size ${batch_size} \
@@ -1632,7 +1636,7 @@ if [ ${stage} -le 15 ] && [ ${stop_stage} -ge 15 ] && ! [[ " ${skip_stages} " =~
         _data="${data_feats}/${dset}"
         _dir="${asr_exp}/${inference_tag}/${dset}"
 
-        for _tok_type in "word" "bpe"; do  #"char" "word" "bpe"; do
+        for _tok_type in  "char" "word" "bpe"; do
             [ "${_tok_type}" = bpe ] && [ ! -f "${tgt_bpemodel}" ] && continue
 
             _opts="--token_type ${_tok_type} "

@@ -5,7 +5,7 @@ src_tokenizer_encode_conf:
     alpha: 0.4
     nbest_size: -1
 
-frontend: embed_multi_input     # embedding + positional encoding
+frontend: embed     # embedding + positional encoding
 frontend_conf:
     embed_dim: 512
     positional_dropout_rate: 0.1
@@ -60,7 +60,7 @@ decoder_conf:
     src_attention_dropout_rate: 0.1
     layer_drop_rate: 0.0
 
-model: discrete_asr_multi_input
+model: discrete_asr
 model_conf:
     ctc_weight: 0.3
     lsm_weight: 0.1
@@ -73,8 +73,8 @@ num_att_plot: 1
 log_interval: 1000
 num_workers: 4
 batch_type: numel
-batch_bins: 100000000 #140000000 #56000000 #10000 # 10000000 #28000000 # 280000000
-accum_grad: 4
+batch_bins: 5000000 # for token about 40 # 20000000 # for # of tokens like 300 # 140000000 for #of token=5000#84000000 # 28000000 *3 # 1/10
+accum_grad: 4 #2
 max_epoch: 70
 patience: none
 init: none
@@ -86,8 +86,8 @@ keep_nbest_models: 10
 
 optim: adam
 optim_conf:
-    lr: 0.003  # 0.0006
+    lr: 0.003 #0.0018 #0.0006 #0.006
     weight_decay: 0.000001
 scheduler: warmuplr
 scheduler_conf:
-    warmup_steps: 11000 # 15000
+    warmup_steps: 175000 # for # of tokens like 300 # 2500 for #of token=5000# #5000 for wavlm #15000

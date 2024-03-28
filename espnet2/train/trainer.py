@@ -156,6 +156,10 @@ class Trainer:
         reporter.load_state_dict(states["reporter"])
         for optimizer, state in zip(optimizers, states["optimizers"]):
             optimizer.load_state_dict(state)
+            # set the optimizer's param_groups capturable to True
+
+            # optimizer.param_groups[0]['capturable'] = True
+
         for scheduler, state in zip(schedulers, states["schedulers"]):
             if scheduler is not None:
                 scheduler.load_state_dict(state)

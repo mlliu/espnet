@@ -398,13 +398,15 @@ class MTTask_multi_input(AbsTask):
     ) -> Tuple[str, ...]:
         if not inference:
             # retval = ("src_text", "text") # because we have build_preprocess_fn
-            retval = ("src_text_1", "src_text_2", "text")
+            retval = ("src_text_1", "text")
 
 
         else:
             # Recognition mode
             #retval = ("src_text",)
-            retval = ("src_text_1", "src_text_2")
+            #retval = ("src_text_1", "src_text_2")
+
+            retval = ("src_text_1",)
         return retval
 
     @classmethod
@@ -412,9 +414,9 @@ class MTTask_multi_input(AbsTask):
         cls, train: bool = True, inference: bool = False
     ) -> Tuple[str, ...]:
         if not inference:
-            retval = ()
+            retval = ("src_text_2", "src_text_3", "src_text_4")
         else:
-            retval = ()
+            retval = ("src_text_2", "src_text_3", "src_text_4")
         assert check_return_type(retval)
         return retval
 
@@ -733,8 +735,13 @@ def collate_fn_multi_input(
     # concate the src_text_1, src_text_2 if exist, src_text_3 if exist, src_text_4 if exist to src_text if there are more than one src_text
 
     tmp_src_text = []
+
     for i in range(1, num_src_text + 1):
         tmp_src_text.append(output[f"src_text_{i}"])
+    # check if the dimension matched for concating
+    # if not matched, we need to pad the tensor to make them have the same dimension
+    # if matched, we can just concate them
+
     output["src_text"] = torch.stack(tmp_src_text, dim=-1)
 
     #output["src_text"] = torch.cat([output["src_text_1"], output["src_text_2"], output["src_text_3"], output["src_text_4"]], dim=-1) #shape: (Batch, Length, ...)

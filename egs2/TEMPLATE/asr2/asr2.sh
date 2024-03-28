@@ -30,6 +30,7 @@ skip_stages=         # Spicify the stage to be skipped
 skip_data_prep=false # Skip data preparation stages.
 skip_train=false     # Skip training stages.
 skip_4a=false
+skip_7a=false
 skip_eval=false      # Skip decoding and evaluation stages.
 skip_upload=true     # Skip packing and uploading to zenodo.
 skip_upload_hf=true  # Skip uploading to hugging face stages.
@@ -694,7 +695,7 @@ fi
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [[:space:]]4[[:space:]] ]]; then
     log "Stage 4a: Extract using ${kmeans_feature_type} features"
     #_suf="${layer}/"  #"tri4b/"
-    _suf="layer${layer}/"
+    _suf="${layer}/"
     if ! "${skip_4a}"; then
 
       if ! $kmeans_cluster; then
@@ -705,7 +706,7 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [
         if "${skip_train}"; then
           _dsets="${test_sets}"
         else
-          _dsets="${train_set} ${train_sp_sets} ${test_sets}"
+          _dsets="${train_set} ${train_sp_sets} ${test_sets} ${valid_set}"
         fi
         for dset in ${_dsets}; do
             _dump_dir="${data_extract}/${kmeans_feature_type}/${_suf}${dset}"
@@ -713,7 +714,13 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [
 
             echo "Dump hmm ${dset} features to ${_dump_dir}"
             #_pdf_alignment="${hmmdir}/decode_phonelm_${dset}/mono_${dset}_decode_gaussid" #"${hmmKaldidir}_${dset}/tri3b_${dset}_pdf_alignment"
-	    _pdf_alignment="${hmmdir}/decode_tgmed_${dset}/tri4b_4200_${dset}_decode_pdf_alignment"
+	    #_pdf_alignment="${hmmdir}/decode_uniphonelm_${dset}/tri4b_4200_${dset}_decode_phones_alignment"
+
+	          #hmmdir="/export/fs05/mliu121/kaldi/egs/librispeech/s5/exp/wavlm_1000beam_nodelta_trans_monostate_monophone/mono/decode_phonelm_train_clean_100/mono_train_clean_100_decode_phones_alignment"
+	          # _pdf_alignmnet is to replace the train_clean_100 of hmmdir with the dset
+	          _pdf_alignment="${hmmdir//${train_set}/${dset}}"
+	          echo "the _pdf_alignment is ${_pdf_alignment}"
+
                # else
             #	_pdf_alignment="${hmmKaldidir}/align_${dset}/${layer}_${dset}_align_pdf_alignment"
              #   fi
@@ -723,15 +730,21 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [
              if [ -f "${_pseudo_labels}" ]; then
                rm "${_pseudo_labels}"
                    fi
-             while IFS= read -r line; do
-               echo "${line}" | sed -e 's/lbi-//g' >> "${_pseudo_labels}"
-             done < "${_pdf_alignment}"
+#             while IFS= read -r line; do
+#               echo "${line}" | sed -e 's/lbi-//g' >> "${_pseudo_labels}"
+#             done < "${_pdf_alignment}"
+              # directly copy the pdf alignment to the pseudo_labels
+              cp "${_pdf_alignment}" "${_pseudo_labels}"
+
 
         done
         # merge the dev dataset if not skip train and dev_clean in the test_sets list, like test_sets="dev_clean dev_other"
-        if ! $skip_train && [[ " ${test_sets} " =~ [[:space:]]dev_clean[[:space:]] ]]; then
-             _dump_dir="${data_extract}/${kmeans_feature_type}/${_suf}"
-             utils/combine_data.sh --extra_files "pseudo_labels_km${nclusters}.txt" "${_dump_dir}${valid_set}"  "${_dump_dir}dev_clean"  "${_dump_dir}dev_other"
+        # if dataset is librispeech_100, we can use the dev_clean and dev_other to merge the dev dataset
+        if [ $dataset = "librispeech_100" ]; then
+          if ! $skip_train && [[ " ${test_sets} " =~ [[:space:]]dev_clean[[:space:]] ]]; then
+               _dump_dir="${data_extract}/${kmeans_feature_type}/${_suf}"
+               utils/combine_data.sh --extra_files "pseudo_labels_km${nclusters}.txt" "${_dump_dir}${valid_set}"  "${_dump_dir}dev_clean"  "${_dump_dir}dev_other"
+          fi
         fi
       else
          echo "we use k-means as tokenizer"
@@ -932,25 +945,29 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ] && ! [[ " ${skip_stages} " =~ [
         echo "filter samples with empty texts: removed $((org_num_samples - filtered_num_samples)) samples with empty text"
 
 	# sort the src file in the train
-	if [ "${dset}" = "${train_set}" ] || [ "${dset}" = "${valid_set}" ]; then
-		src_file=${data_feats}/${dset}/text.${src_case}.${src_lang}
-		echo "sort the src file ${src_file}"
-		cp ${src_file} ${src_file}.tmp
-		awk 'NR==FNR {order[$2]=$1; next} {print order[$1], $0}' ${data_feats}/${dset}/text.ts.en ${src_file} | sort -n | cut -d' ' -f2- > ${src_file}_sorted
-	
-		rm ${src_file}
-		mv ${src_file}_sorted ${src_file}
+#	if [ "${dset}" = "${train_set}" ] || [ "${dset}" = "${valid_set}" ]; then
+#		src_file=${data_feats}/${dset}/text.${src_case}.${src_lang}
+#		tgt_file=${data_feats}/${dset}/text.${tgt_case}.${tgt_lang}
+#		echo "sort the src file ${src_file}"
+#		cp ${src_file} ${src_file}.tmp
+#		awk 'NR==FNR {order[$2]=$1; next} {print order[$1], $0}' ${tgt_file} ${src_file} | sort -n | cut -d' ' -f2- > ${src_file}_sorted
+#
+#		#echo the tgt file
+#		echo "tgt file ${tgt_file}"
 
-		# sort the tgt file in the train
-		tgt_file=${data_feats}/${dset}/text.${tgt_case}.${tgt_lang}
-		echo "sort the tgt file ${tgt_file}"
-		cp ${tgt_file} ${tgt_file}.tmp
-		awk 'NR==FNR {order[$2]=$1; next} {print order[$1], $0}' ${src_file} ${tgt_file} | sort -n | cut -d' ' -f2- > ${tgt_file}_sorted
-		rm ${tgt_file}
-		mv ${tgt_file}_sorted ${tgt_file}
+		#rm ${src_file}
+		#mv ${src_file}_sorted ${src_file}
+#
+#		# sort the tgt file in the train
+#		tgt_file=${data_feats}/${dset}/text.${tgt_case}.${tgt_lang}
+#		echo "sort the tgt file ${tgt_file}"
+#		cp ${tgt_file} ${tgt_file}.tmp
+#		awk 'NR==FNR {order[$2]=$1; next} {print order[$1], $0}' ${src_file} ${tgt_file} | sort -n | cut -d' ' -f2- > ${tgt_file}_sorted
+#		rm ${tgt_file}
+#		mv ${tgt_file}_sorted ${tgt_file}
 
 
-	fi 
+# fi
 
         # TODO: Add other data cleaning -- currently being done as part of data.sh
     done
@@ -970,78 +987,86 @@ if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ] && ! [[ " ${skip_stages} " =~ [
         tgt_bpe_train_text="${data_feats}/${train_set}/text.${src_lang}_${tgt_lang}"
     fi
     # First generate tgt lang
-    if [ "${tgt_token_type}" = bpe ]; then
-        log "Stage 7a: Generate token_list from ${tgt_bpe_train_text} using BPE for tgt_lang"
-
-        mkdir -p "${tgt_bpedir}"
-        # shellcheck disable=SC2002
-        cat ${tgt_bpe_train_text} | cut -f 2- -d" "  > "${tgt_bpedir}"/train.txt
-
-        if [ -n "${tgt_bpe_nlsyms}" ]; then
-            _opts_spm="--user_defined_symbols=${tgt_bpe_nlsyms}"
-        else
-            _opts_spm=""
-        fi
-
-        spm_train \
-            --input="${tgt_bpedir}"/train.txt \
-            --vocab_size="${tgt_nbpe}" \
-            --model_type="${tgt_bpemode}" \
-            --model_prefix="${tgt_bpeprefix}" \
-            --character_coverage=${tgt_bpe_char_cover} \
-            --input_sentence_size="${tgt_bpe_input_sentence_size}" \
-            ${_opts_spm}
-
-        {
-        echo "${blank}"
-        echo "${oov}"
-        # Remove <unk>, <s>, </s> from the vocabulary
-        <"${tgt_bpeprefix}".vocab awk '{ if( NR != 1 && NR != 2 && NR != 3 ){ print $1; } }'
-        echo "${sos_eos}"
-        } > "${tgt_token_list}"
-
-    elif [ "${tgt_token_type}" = char ] || [ "${tgt_token_type}" = word ]; then
-        log "Stage 7a: Generate character level token_list from ${tgt_bpe_train_text}  for tgt_lang"
-
-        _opts="--non_linguistic_symbols ${nlsyms_txt}"
-
-        # shellcheck disable=SC2002
-        cat ${tgt_bpe_train_text} | cut -f 2- -d" "  > "${data_feats}"/token_train.txt
-
-        # The first symbol in token_list must be "<blank>" and the last must be also sos/eos:
-        # 0 is reserved for CTC-blank for ASR and also used as ignore-index in the other task
-        ${python} -m espnet2.bin.tokenize_text  \
-            --token_type "${tgt_token_type}" \
-            --input "${data_feats}/token_train.txt" --output "${tgt_token_list}" ${_opts} \
-            --field 1- \
-            --cleaner "${cleaner}" \
-            --g2p "${g2p}" \
-            --write_vocabulary true \
-            --add_symbol "${blank}:0" \
-            --add_symbol "${oov}:1" \
-            --add_symbol "${sos_eos}:-1"
+    # if skip 7a, then we need to skip 7b
+    if "${skip_7a}"; then
+        log "Skip stage 7a: Token construction for tgt_lang"
 
     else
-        log "Error: not supported --token_type '${tgt_token_type}'"
-        exit 2
-    fi
 
-    # Create word-list for word-LM training
-    if ${use_word_lm} && [ "${tgt_token_type}" != word ]; then
-        log "Generate word level token_list from ${data_feats}/lm_train.txt"
-        ${python} -m espnet2.bin.tokenize_text \
-            --token_type word \
-            --input "${data_feats}/lm_train.txt" --output "${lm_token_list}" \
-            --field 2- \
-            --cleaner "${cleaner}" \
-            --g2p "${g2p}" \
-            --write_vocabulary true \
-            --vocabulary_size "${word_vocab_size}" \
-            --add_symbol "${blank}:0" \
-            --add_symbol "${oov}:1" \
-            --add_symbol "${sos_eos}:-1"
+      if [ "${tgt_token_type}" = bpe ]; then
+          log "Stage 7a: Generate token_list from ${tgt_bpe_train_text} using BPE for tgt_lang"
+
+          mkdir -p "${tgt_bpedir}"
+          # shellcheck disable=SC2002
+          echo "tgt_bpe_train_text is ${tgt_bpe_train_text}"
+          cat ${tgt_bpe_train_text} | cut -f 2- -d" "  > "${tgt_bpedir}"/train.txt
+
+
+          if [ -n "${tgt_bpe_nlsyms}" ]; then
+              _opts_spm="--user_defined_symbols=${tgt_bpe_nlsyms}"
+          else
+              _opts_spm=""
+          fi
+
+          spm_train \
+              --input="${tgt_bpedir}"/train.txt \
+              --vocab_size="${tgt_nbpe}" \
+              --model_type="${tgt_bpemode}" \
+              --model_prefix="${tgt_bpeprefix}" \
+              --character_coverage=${tgt_bpe_char_cover} \
+              --input_sentence_size="${tgt_bpe_input_sentence_size}" \
+              ${_opts_spm}
+
+          {
+          echo "${blank}"
+          echo "${oov}"
+          # Remove <unk>, <s>, </s> from the vocabulary
+          <"${tgt_bpeprefix}".vocab awk '{ if( NR != 1 && NR != 2 && NR != 3 ){ print $1; } }'
+          echo "${sos_eos}"
+          } > "${tgt_token_list}"
+
+      elif [ "${tgt_token_type}" = char ] || [ "${tgt_token_type}" = word ]; then
+          log "Stage 7a: Generate character level token_list from ${tgt_bpe_train_text}  for tgt_lang"
+
+          _opts="--non_linguistic_symbols ${nlsyms_txt}"
+
+          # shellcheck disable=SC2002
+          cat ${tgt_bpe_train_text} | cut -f 2- -d" "  > "${data_feats}"/token_train.txt
+
+          # The first symbol in token_list must be "<blank>" and the last must be also sos/eos:
+          # 0 is reserved for CTC-blank for ASR and also used as ignore-index in the other task
+          ${python} -m espnet2.bin.tokenize_text  \
+              --token_type "${tgt_token_type}" \
+              --input "${data_feats}/token_train.txt" --output "${tgt_token_list}" ${_opts} \
+              --field 1- \
+              --cleaner "${cleaner}" \
+              --g2p "${g2p}" \
+              --write_vocabulary true \
+              --add_symbol "${blank}:0" \
+              --add_symbol "${oov}:1" \
+              --add_symbol "${sos_eos}:-1"
+
+      else
+          log "Error: not supported --token_type '${tgt_token_type}'"
+          exit 2
+      fi
+
+      # Create word-list for word-LM training
+      if ${use_word_lm} && [ "${tgt_token_type}" != word ]; then
+          log "Generate word level token_list from ${data_feats}/lm_train.txt"
+          ${python} -m espnet2.bin.tokenize_text \
+              --token_type word \
+              --input "${data_feats}/lm_train.txt" --output "${lm_token_list}" \
+              --field 2- \
+              --cleaner "${cleaner}" \
+              --g2p "${g2p}" \
+              --write_vocabulary true \
+              --vocabulary_size "${word_vocab_size}" \
+              --add_symbol "${blank}:0" \
+              --add_symbol "${oov}:1" \
+              --add_symbol "${sos_eos}:-1"
+      fi
     fi
-   
 
    echo "generate token for src language"
     # Then generate src lang
@@ -1547,7 +1572,8 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
     else
         _dsets="${test_sets}"
     fi
-    for dset in ${_dsets}; do
+    #for dset in ${_dsets}; do
+    for dset in test_1h; do
         _data="${data_feats}/${dset}"
         _dir="${asr_exp}/${inference_tag}/${dset}"
         _logdir="${_dir}/logdir"
@@ -1569,19 +1595,49 @@ if [ ${stage} -le 14 ] && [ ${stop_stage} -ge 14 ] && ! [[ " ${skip_stages} " =~
         utils/split_scp.pl "${key_file}" ${split_scps}
 
         # 2. Submit decoding jobs
+
         log "Decoding started... log: '${_logdir}/asr_inference.*.log'"
         # shellcheck disable=SC2046,SC2086
-        #${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
-	${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
-            ${python} -m ${asr_inference_tool} \
-                --batch_size ${batch_size} \
-                --ngpu "${_ngpu}" \
-                --data_path_and_name_and_type "${_data}/${_scp},src_text,text" \
-                --key_file "${_logdir}"/keys.JOB.scp \
-                --mt_train_config "${asr_exp}"/config.yaml \
-                --mt_model_file "${asr_exp}"/"${inference_asr_model}" \
-                --output_dir "${_logdir}"/output.JOB \
-                ${_opts} ${inference_args} || { cat $(grep -l -i error "${_logdir}"/asr_inference.*.log) ; exit 1; }
+        # if not using gpu for inference
+        echo "gpu_inference is ${gpu_inference}"
+        # if gpu_inference is false, then we use the cpu to do the inference
+        if ! ${gpu_inference}; then
+                #${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
+          ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
+                         ${python} -m ${asr_inference_tool} \
+                        --batch_size ${batch_size} \
+                        --ngpu "${_ngpu}" \
+                        --data_path_and_name_and_type "${_data}/${_scp},src_text,text" \
+                        --key_file "${_logdir}"/keys.JOB.scp \
+                        --mt_train_config "${asr_exp}"/config.yaml \
+                        --mt_model_file "${asr_exp}"/"${inference_asr_model}" \
+                        --output_dir "${_logdir}"/output.JOB \
+                        ${_opts} ${inference_args} || { cat $(grep -l -i error "${_logdir}"/asr_inference.*.log) ; exit 1; }
+        else
+          # we submit each task to a single GPU
+          # assert the number of tasks equal to the number of GPUs
+          if [ "${_nj}" -ne "${ngpu}" ]; then
+              echo "Error: _nj=${_nj} and ngpu=${ngpu} must be equal"
+              exit 1
+          fi
+          for i in $(seq "${_nj}"); do
+            (
+            ${_cmd} JOB=$i "${_logdir}"/asr_inference.$i.log \
+                CUDA_VISIBLE_DEVICES="$((i - 1))" \
+                ${python} -m ${asr_inference_tool} \
+                    --batch_size ${batch_size} \
+                    --ngpu 1 \
+                    --data_path_and_name_and_type "${_data}/${_scp},src_text,text" \
+                    --key_file "${_logdir}"/keys.JOB.scp \
+                    --mt_train_config "${asr_exp}"/config.yaml \
+                    --mt_model_file "${asr_exp}"/"${inference_asr_model}" \
+                    --output_dir "${_logdir}"/output.JOB \
+                    ${_opts} ${inference_args} || { cat $(grep -l -i error "${_logdir}"/asr_inference.*.log) ; exit 1; }
+            ) &
+          done
+        fi
+        wait # wait for all background processes to finish
+
 
         # 3. Concatenates the output files from each jobs
         for f in token token_int score text; do
